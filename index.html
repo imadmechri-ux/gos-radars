@@ -721,7 +721,7 @@ button:disabled{opacity:.5}
     $("step").classList.remove("hidden");
     $("stopNav").classList.remove("hidden");
     state.followUser = true;
-    map.easeTo({ zoom: 17, pitch: 45, duration: 600 });
+    map.easeTo({ zoom: navZoom(), pitch: 45, duration: 600 });
     updateNavigation();
     if (state.route.steps[0]) speak(`Itinéraire démarré. ${state.route.steps[0].text}`);
   }
@@ -761,6 +761,22 @@ button:disabled{opacity:.5}
     $("search").classList.add("hidden");
     $("step").classList.remove("hidden");
     $("stopNav").classList.remove("hidden");
+  }
+
+  // Zoom selon la vitesse : proche à basse vitesse, plus large à grande vitesse
+  const ZOOM_STEPS = [[0, 17.8], [30, 17.2], [60, 16.2], [90, 15.4], [120, 14.8]];
+  let zoomSpeed = 0; // vitesse lissée, en km/h
+  function targetZoom(kmh) {
+    const v = Math.max(0, Math.min(kmh, ZOOM_STEPS[ZOOM_STEPS.length - 1][0]));
+    for (let i = 1; i < ZOOM_STEPS.length; i++) {
+      const [v1, z1] = ZOOM_STEPS[i], [v0, z0] = ZOOM_STEPS[i - 1];
+      if (v <= v1) return z0 + (z1 - z0) * ((v - v0) / (v1 - v0));
+    }
+    return ZOOM_STEPS[ZOOM_STEPS.length - 1][1];
+  }
+  function navZoom() {
+    zoomSpeed = zoomSpeed * 0.7 + (state.kmh ?? 0) * 0.3;
+    return targetZoom(zoomSpeed);
   }
 
   function nearestIndex(pos, pts) {
@@ -901,7 +917,7 @@ button:disabled{opacity:.5}
     userMarker.setLngLat([now.lon, now.lat]).addTo(map);
     if (state.nav) {
       map.easeTo({
-        center: [now.lon, now.lat], zoom: 17, duration: 500,
+        center: [now.lon, now.lat], zoom: navZoom(), duration: 800,
         bearing: state.course != null && (state.kmh ?? 0) >= MIN_KMH_HEADING ? state.course : map.getBearing(),
       });
     } else if (state.followUser) {
