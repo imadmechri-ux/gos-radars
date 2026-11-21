@@ -9,71 +9,125 @@
 <meta name="apple-mobile-web-app-title" content="Radars">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
 <style>
 :root{
   --bg:#F2F5F1; --surface:#FFFFFF; --ink:#14302A; --muted:#5C736C; --line:#D9E2DC;
-  --accent:#0C6B5B; --accent-ink:#FFFFFF; --gold:#A8771C; --danger:#B3402E;
+  --accent:#0C6B5B; --accent-ink:#FFFFFF; --accent-soft:#DDEDE7; --gold:#A8771C; --danger:#B3402E;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#0E1917; --surface:#172522; --ink:#E4EEE9; --muted:#8FA59D; --line:#294039;
-    --accent:#56C7AC; --accent-ink:#0E1917; --gold:#E0B25B; --danger:#F08A78;
+    --accent:#56C7AC; --accent-ink:#0E1917; --accent-soft:#1F3A33; --gold:#E0B25B; --danger:#F08A78;
     color-scheme:dark;
   }
 }
-:root[data-theme="dark"]{
-  --bg:#0E1917; --surface:#172522; --ink:#E4EEE9; --muted:#8FA59D; --line:#294039;
-  --accent:#56C7AC; --accent-ink:#0E1917; --gold:#E0B25B; --danger:#F08A78;
-  color-scheme:dark;
-}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
 #map{position:fixed;inset:0}
-.top{position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 12px) 16px 0;pointer-events:none;display:flex;flex-direction:column;gap:10px}
-.banner{pointer-events:auto;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;box-shadow:0 4px 18px rgba(0,0,0,.18)}
-.banner.on{display:block}
-.banner.alert{border-color:var(--gold)}
-.banner.over{border-color:var(--danger)}
-.banner .big{font-size:22px;font-weight:700}
-.banner .sub{font-size:14px;color:var(--muted);margin-top:2px}
-.banner.over .big{color:var(--danger)}
-.bottom{position:fixed;left:0;right:0;bottom:0;padding:14px 16px calc(env(safe-area-inset-bottom) + 14px);background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;display:flex;align-items:center;gap:14px;box-shadow:0 -4px 18px rgba(0,0,0,.12)}
-.speed{min-width:86px;text-align:center}
-.speed .n{font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
-.speed .u{font-size:12px;color:var(--muted)}
-.info{flex:1;font-size:13px;color:var(--muted);line-height:1.35}
-.info strong{color:var(--ink)}
-button{font:inherit;border:0;border-radius:12px;padding:13px 16px;font-weight:700;cursor:pointer;background:var(--accent);color:var(--accent-ink);min-height:48px}
-button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button,input{font:inherit}
+button{border:0;border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer;background:var(--accent);color:var(--accent-ink);min-height:44px}
+button.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 button:disabled{opacity:.5}
-.note{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 118px);font-size:12px;color:var(--muted);text-align:center;pointer-events:none}
-.fab{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom) + 130px);width:48px;min-height:48px;padding:0;border-radius:50%;background:var(--surface);color:var(--ink);border:1px solid var(--line);font-size:20px}
+
+/* Colonne haute : guidage, radars, recherche */
+.top{position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 10px) 12px 0;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.top > *{pointer-events:auto}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 4px 18px rgba(0,0,0,.18)}
+.step{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.step .arrow{font-size:34px;line-height:1;min-width:44px;text-align:center}
+.step .dist{font-size:22px;font-weight:800}
+.step .txt{font-size:14px;opacity:.95;margin-top:2px}
+.pill{padding:10px 14px;font-size:15px;font-weight:700}
+.pill.alert{border-color:var(--gold)}
+.pill.over{border-color:var(--danger);color:var(--danger)}
+.pill small{display:block;font-weight:500;color:var(--muted);font-size:13px;margin-top:2px}
+
+.search{padding:12px;display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow:auto}
+.search form{display:flex;gap:8px}
+.search input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:16px}
+.search .chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:8px 12px;min-height:36px;font-size:13px;border-radius:999px;background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);color:var(--ink);border-color:var(--accent)}
+.opt{display:flex;flex-direction:column;gap:6px}
+.opt .hint{font-size:12px;color:var(--muted)}
+.results{display:flex;flex-direction:column;gap:8px}
+.route{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);text-align:left;color:var(--ink);min-height:0}
+.route[aria-selected="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.route .t{font-size:18px;font-weight:800}
+.route .m{font-size:13px;color:var(--muted);margin-top:2px}
+.route .badges{font-size:12px;color:var(--muted);text-align:right}
+.dests{display:flex;flex-direction:column;gap:6px}
+.dests button{background:var(--bg);color:var(--ink);border:1px solid var(--line);text-align:left;font-weight:500;font-size:14px}
+
+/* Barre basse */
+.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.12);display:flex;align-items:center;gap:10px}
+.speedbox{min-width:72px;text-align:center}
+.speed{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.speed.over{color:var(--danger)}
+.unit{font-size:11px;color:var(--muted)}
+.limit{width:50px;height:50px;border-radius:50%;border:4px solid #C0392B;background:#fff;color:#111;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex:0 0 auto}
+.limit.none{border-color:var(--line);color:var(--muted);background:var(--bg)}
+.trip{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trip strong{color:var(--ink);font-size:17px;display:block}
+.bar .icon{min-width:44px;padding:10px;font-size:18px}
+.note{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 96px);font-size:13px;color:var(--ink);text-align:center;pointer-events:none}
+.note span{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 10px;display:inline-block}
+.fab{position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom) + 104px);width:46px;min-width:46px;min-height:46px;padding:0;border-radius:50%;background:var(--surface);color:var(--ink);border:1px solid var(--line);font-size:20px}
+.hidden{display:none !important}
 </style>
 </head>
 <body>
 <div id="map" role="region" aria-label="Carte"></div>
 
 <div class="top">
-  <div id="banner" class="banner" role="status" aria-live="polite">
-    <div class="big" id="bannerBig"></div>
-    <div class="sub" id="bannerSub"></div>
+  <div id="step" class="card step hidden" role="status" aria-live="polite">
+    <div class="arrow" id="stepArrow">&#8593;</div>
+    <div style="min-width:0">
+      <div class="dist" id="stepDist"></div>
+      <div class="txt" id="stepTxt"></div>
+    </div>
   </div>
+
+  <div id="radar" class="card pill hidden" role="status" aria-live="polite"></div>
+
+  <section id="search" class="card search">
+    <form id="searchForm">
+      <input id="dest" type="search" placeholder="Où allez-vous ?" autocomplete="off" enterkeyhint="search" aria-label="Destination">
+      <button type="submit">Chercher</button>
+    </form>
+    <div class="dests" id="dests"></div>
+
+    <div class="opt">
+      <div class="chips" role="group" aria-label="Options d'itinéraire">
+        <button class="chip" data-opt="tolls" aria-pressed="false">Éviter péages</button>
+        <button class="chip" data-opt="highways" aria-pressed="false">Éviter autoroutes</button>
+        <button class="chip" data-opt="ferries" aria-pressed="false">Éviter ferries</button>
+        <button class="chip" data-opt="unpaved" aria-pressed="false">Éviter pavés et chemins</button>
+      </div>
+      <div class="hint">Les options s'appliquent au prochain calcul d'itinéraire.</div>
+    </div>
+
+    <div class="results" id="results"></div>
+    <button id="goBtn" class="hidden" type="button">Démarrer la navigation</button>
+  </section>
 </div>
 
-<button class="fab" id="locate" aria-label="Me recentrer">&#9678;</button>
-<div class="note" id="note"></div>
+<button class="fab" id="locate" aria-label="Me recentrer" title="Me recentrer">&#9678;</button>
+<div class="note hidden" id="note"><span id="noteText"></span></div>
 
-<div class="bottom">
-  <div class="speed" aria-label="Vitesse actuelle">
-    <div class="n" id="speed">--</div>
-    <div class="u">km/h</div>
+<div class="bar" id="bar">
+  <div class="speedbox">
+    <div class="speed" id="speed">--</div>
+    <div class="unit">km/h</div>
   </div>
-  <div class="info" id="info">
-    Appuyez sur <strong>Démarrer</strong> pour suivre votre position et être alerté à l'approche des radars fixes.
-  </div>
-  <button id="toggle">Démarrer</button>
+  <div class="limit none" id="limit" aria-label="Limite de vitesse">--</div>
+  <div class="trip" id="trip">Position en cours</div>
+  <button class="ghost icon" id="mute" aria-label="Couper la voix" title="Voix">&#128266;</button>
+  <button id="stopNav" class="hidden" type="button">Quitter</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
@@ -81,29 +135,32 @@ button:disabled{opacity:.5}
 (() => {
   "use strict";
 
+  // ---------- Réglages ----------
   const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
-  const ALERT_DIST = 700;      // m : annonce du radar
-  const LIST_DIST = 1000;      // m : radar affiché dans le bandeau
-  const RESET_DIST = 1200;     // m : au-delà, le radar peut de nouveau être annoncé
-  const AHEAD_ANGLE = 45;      // degrés de part et d'autre du cap
-  const MIN_KMH_FOR_HEADING = 5;
+  const VALHALLA = "https://valhalla1.openstreetmap.de";
+  const NOMINATIM = "https://nominatim.openstreetmap.org/search";
+  const ALERT_DIST = 700;     // m : annonce d'un radar
+  const LIST_DIST = 1000;     // m : radar affiché
+  const RESET_DIST = 1200;    // m : libère un radar déjà annoncé
+  const AHEAD_ANGLE = 45;     // degrés autour du cap
+  const MIN_KMH_HEADING = 5;
+  const OFF_ROUTE_M = 60;     // m : au-delà, hors itinéraire
+  const OFF_ROUTE_COUNT = 3;  // mesures consécutives avant recalcul
+  const LIMIT_EVERY_MS = 12000;
+  const LIMIT_EVERY_M = 150;
 
   const $ = (id) => document.getElementById(id);
-  const ui = { banner: $("banner"), big: $("bannerBig"), sub: $("bannerSub"), speed: $("speed"),
-               info: $("info"), toggle: $("toggle"), locate: $("locate"), note: $("note") };
+
+  // Préférences d'itinéraire (mémorisées sur l'appareil)
+  const OPTS = { tolls: false, highways: false, ferries: false, unpaved: false };
+  try { Object.assign(OPTS, JSON.parse(localStorage.getItem("gr-opts") || "{}")); } catch (e) { /* ignoré */ }
 
   const state = {
-    radars: [],
-    pos: null,           // {lat, lon}
-    prevPos: null,
-    kmh: null,
-    course: null,       // degrés, 0 = nord
-    watchId: null,
-    active: false,
-    alerted: new Set(),
-    wakeLock: null,
-    voiceReady: false,
-    followUser: true,
+    radars: [], pos: null, prevPos: null, kmh: null, course: null,
+    trail: [], limit: null, lastLimitAt: 0, lastLimitPos: null, limitBusy: false,
+    alerted: new Set(), wakeLock: null, voiceReady: false, muted: false,
+    followUser: true, dest: null, routes: [], routeIdx: 0, route: null,
+    nav: false, stepIdx: 0, spoken: {}, offCount: 0, rerouting: false,
   };
 
   // ---------- Géométrie ----------
@@ -121,212 +178,493 @@ button:disabled{opacity:.5}
     const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(dLon);
     return (deg(Math.atan2(y, x)) + 360) % 360;
   }
-  function angleDiff(a, b) {
-    const d = Math.abs(a - b) % 360;
-    return d > 180 ? 360 - d : d;
+  function angleDiff(a, b) { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; }
+
+  // Décodage polyline (précision 1e-6), format Valhalla
+  function decodePolyline(str) {
+    const pts = []; let i = 0, lat = 0, lon = 0;
+    while (i < str.length) {
+      for (let k = 0; k < 2; k++) {
+        let shift = 0, res = 0, b;
+        do { b = str.charCodeAt(i++) - 63; res |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        const v = (res & 1) ? ~(res >> 1) : (res >> 1);
+        if (k === 0) lat += v; else lon += v;
+      }
+      pts.push({ lat: lat / 1e6, lon: lon / 1e6 });
+    }
+    return pts;
   }
 
-  // ---------- Données ----------
-  async function loadRadars() {
-    try {
-      const res = await fetch("data/radars.json", { cache: "no-cache" });
-      state.radars = await res.json();
-    } catch (e) {
-      state.radars = [];
-      setNote("Impossible de charger les radars. Vérifiez la connexion.");
-    }
+  function fmtDist(m) {
+    if (m < 1000) return `${Math.max(0, Math.round(m / 10) * 10)} m`;
+    return `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace(".", ",")} km`;
   }
+  function fmtDuration(s) {
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} min`;
+    return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+  }
+  function fmtClock(date) {
+    return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // ---------- Messages ----------
+  let noteTimer = null;
+  function status(text, ms = 4000) {
+    $("noteText").textContent = text;
+    $("note").classList.remove("hidden");
+    clearTimeout(noteTimer);
+    if (ms) noteTimer = setTimeout(() => $("note").classList.add("hidden"), ms);
+  }
+
+  // ---------- Voix et écran allumé ----------
+  function speak(text) {
+    if (state.muted || !("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "fr-FR"; u.rate = 1.05;
+    speechSynthesis.speak(u);
+  }
+  function unlockVoice() {
+    if (state.voiceReady || !("speechSynthesis" in window)) return;
+    speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+    state.voiceReady = true;
+  }
+  async function keepAwake() {
+    try { if ("wakeLock" in navigator) state.wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { /* indisponible */ }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") keepAwake();
+  });
 
   // ---------- Carte ----------
   const map = new maplibregl.Map({
-    container: "map",
-    style: STYLE_URL,
-    center: [2.35, 46.6],
-    zoom: 5.5,
+    container: "map", style: STYLE_URL, center: [2.35, 46.6], zoom: 5.5,
     attributionControl: { compact: true },
   });
   map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: false }), "top-right");
+  map.on("dragstart", () => { state.followUser = false; });
 
   const userEl = document.createElement("div");
   userEl.style.cssText = "width:18px;height:18px;border-radius:50%;background:#0C6B5B;border:3px solid #fff;box-shadow:0 0 0 2px rgba(12,107,91,.35)";
   const userMarker = new maplibregl.Marker({ element: userEl });
+  const destMarker = new maplibregl.Marker({ color: "#B3402E" });
 
-  map.on("dragstart", () => { state.followUser = false; });
+  async function loadRadars() {
+    try {
+      const res = await fetch("data/radars.json", { cache: "no-cache" });
+      state.radars = await res.json();
+    } catch (e) { status("Radars indisponibles (connexion ?)", 6000); }
+  }
 
   map.on("load", async () => {
     await loadRadars();
     map.addSource("radars", {
       type: "geojson",
       data: { type: "FeatureCollection", features: state.radars.map((r) => ({
-        type: "Feature", properties: { id: r.id, vma: r.vma || 0 },
+        type: "Feature", properties: { id: r.id },
         geometry: { type: "Point", coordinates: [r.lon, r.lat] } })) },
     });
     map.addLayer({
       id: "radars", type: "circle", source: "radars",
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 6, 2, 12, 4, 15, 7],
-        "circle-color": "#A8771C",
-        "circle-stroke-color": "#FFFFFF",
-        "circle-stroke-width": 1,
+        "circle-color": "#A8771C", "circle-stroke-color": "#FFFFFF", "circle-stroke-width": 1,
       },
     });
-    setNote("");
+    map.addSource("routes", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({
+      id: "routes", type: "line", source: "routes",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": ["case", ["get", "sel"], "#0C6B5B", "#8A9A95"],
+        "line-width": ["case", ["get", "sel"], 7, 4],
+        "line-opacity": ["case", ["get", "sel"], 0.95, 0.6],
+      },
+    }, "radars");
   });
 
-  // ---------- Voix ----------
-  function speak(text) {
-    if (!("speechSynthesis" in window)) return;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "fr-FR";
-    u.rate = 1.05;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-  }
-  // iOS n'autorise la voix qu'après une action de l'utilisateur.
-  function unlockVoice() {
-    if (state.voiceReady || !("speechSynthesis" in window)) return;
-    speechSynthesis.speak(new SpeechSynthesisUtterance(""));
-    state.voiceReady = true;
+  // ---------- Recherche d'adresse ----------
+  async function geocode(q) {
+    const url = `${NOMINATIM}?format=jsonv2&limit=5&accept-language=fr&countrycodes=fr&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("geocode");
+    return (await res.json()).map((x) => ({ name: x.display_name, lat: +x.lat, lon: +x.lon }));
   }
 
-  // ---------- Écran allumé ----------
-  async function keepAwake() {
+  function showDestinations(list) {
+    const box = $("dests");
+    box.innerHTML = "";
+    for (const d of list) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = d.name.length > 90 ? d.name.slice(0, 88) + "…" : d.name;
+      b.addEventListener("click", () => chooseDestination(d));
+      box.appendChild(b);
+    }
+  }
+
+  async function chooseDestination(d) {
+    state.dest = d;
+    destMarker.setLngLat([d.lon, d.lat]).addTo(map);
+    $("dests").innerHTML = "";
+    await computeRoutes();
+  }
+
+  $("searchForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    unlockVoice();
+    const q = $("dest").value.trim();
+    if (!q) return;
+    status("Recherche de l'adresse…", 0);
     try {
-      if ("wakeLock" in navigator) {
-        state.wakeLock = await navigator.wakeLock.request("screen");
-      }
-    } catch (e) { /* non disponible : rien à faire */ }
-  }
-  function releaseAwake() {
-    if (state.wakeLock) { state.wakeLock.release().catch(() => {}); state.wakeLock = null; }
-  }
-  document.addEventListener("visibilitychange", () => {
-    if (state.active && document.visibilityState === "visible") keepAwake();
+      const list = await geocode(q);
+      if (!list.length) { status("Adresse introuvable", 4000); return; }
+      $("note").classList.add("hidden");
+      if (list.length === 1) chooseDestination(list[0]);
+      else showDestinations(list);
+    } catch (err) { status("Recherche impossible, vérifiez la connexion", 5000); }
   });
 
-  // ---------- Affichage ----------
-  function setNote(t) { ui.note.textContent = t; }
-
-  function showBanner(kind, big, sub) {
-    ui.banner.className = "banner on" + (kind ? " " + kind : "");
-    ui.big.textContent = big;
-    ui.sub.textContent = sub;
+  // ---------- Itinéraires ----------
+  function parseTrip(trip) {
+    let pts = []; const steps = [];
+    for (const leg of trip.legs) {
+      const legPts = decodePolyline(leg.shape);
+      const offset = pts.length;
+      pts = pts.concat(legPts);
+      for (const m of leg.maneuvers) {
+        const idx = offset + (m.begin_shape_index || 0);
+        steps.push({ text: m.instruction, idx, pt: pts[idx] || legPts[0] });
+      }
+    }
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + distance(pts[i - 1], pts[i]));
+    const s = trip.summary;
+    return {
+      pts, cum, total: cum[cum.length - 1] || 1, steps,
+      km: s.length, time: s.time,
+      toll: !!s.has_toll, highway: !!s.has_highway, ferry: !!s.has_ferry,
+    };
   }
-  function hideBanner() { ui.banner.className = "banner"; }
 
-  // ---------- Cœur : position -> alertes ----------
+  async function computeRoutes() {
+    if (!state.pos) { status("Position GPS indisponible. Patientez quelques secondes."); return; }
+    if (!state.dest) return;
+    status("Calcul de l'itinéraire…", 0);
+    const body = {
+      locations: [{ lat: state.pos.lat, lon: state.pos.lon }, { lat: state.dest.lat, lon: state.dest.lon }],
+      costing: "auto",
+      costing_options: { auto: {
+        use_tolls: OPTS.tolls ? 0 : 1,
+        use_highways: OPTS.highways ? 0 : 1,
+        use_ferry: OPTS.ferries ? 0 : 1,
+        exclude_unpaved: OPTS.unpaved,
+      } },
+      alternates: 2,
+      directions_options: { units: "kilometers", language: "fr-FR" },
+    };
+    try {
+      const res = await fetch(`${VALHALLA}/route`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.trip) throw new Error(data.error || "route");
+      const trips = [data.trip, ...((data.alternates || []).map((a) => a.trip))].filter(Boolean);
+      state.routes = trips.map(parseTrip);
+      state.routeIdx = 0;
+      $("note").classList.add("hidden");
+      renderRoutes();
+      selectRoute(0);
+    } catch (err) {
+      state.routes = [];
+      $("results").innerHTML = "";
+      status("Aucun itinéraire avec ces options. Essayez d'en désactiver une.", 6000);
+    }
+  }
+
+  function renderRoutes() {
+    const box = $("results");
+    box.innerHTML = "";
+    const now = Date.now();
+    state.routes.forEach((r, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "route";
+      b.setAttribute("aria-selected", String(i === state.routeIdx));
+      const tags = [r.toll ? "péages" : "sans péage", r.highway ? "autoroute" : "hors autoroute", r.ferry ? "ferry" : ""].filter(Boolean).join(" · ");
+      const arrive = new Date(now + r.time * 1000);
+      b.innerHTML = `<div><div class="t">${fmtDuration(r.time)}</div><div class="m">${fmtDist(r.km * 1000)} · arrivée ${fmtClock(arrive)}</div></div>
+                     <div class="badges">${i === 0 ? "Recommandé<br>" : ""}${tags}</div>`;
+      b.addEventListener("click", () => selectRoute(i));
+      box.appendChild(b);
+    });
+    $("goBtn").classList.toggle("hidden", !state.routes.length);
+  }
+
+  function selectRoute(i) {
+    state.routeIdx = i;
+    const r = state.routes[i];
+    if (!r) return;
+    // Mise à jour des tracés
+    map.getSource("routes").setData({
+      type: "FeatureCollection",
+      features: state.routes.map((x, j) => ({
+        type: "Feature", properties: { sel: j === i },
+        geometry: { type: "LineString", coordinates: x.pts.map((p) => [p.lon, p.lat]) },
+      })).sort((a, b) => (a.properties.sel ? 1 : 0) - (b.properties.sel ? 1 : 0)),
+    });
+    [...$("results").children].forEach((el, j) => el.setAttribute("aria-selected", String(j === i)));
+    if (state.nav) return; // pendant le guidage, on ne recadre pas la carte
+    const bounds = new maplibregl.LngLatBounds();
+    r.pts.forEach((p) => bounds.extend([p.lon, p.lat]));
+    state.followUser = false;
+    map.fitBounds(bounds, { padding: { top: 260, bottom: 170, left: 40, right: 40 }, duration: 600 });
+  }
+
+  // Changement d'options : recalcul immédiat si un trajet est en cours de préparation
+  document.querySelectorAll(".chip").forEach((btn) => {
+    const key = btn.dataset.opt;
+    btn.setAttribute("aria-pressed", String(!!OPTS[key]));
+    btn.addEventListener("click", () => {
+      OPTS[key] = !OPTS[key];
+      btn.setAttribute("aria-pressed", String(OPTS[key]));
+      try { localStorage.setItem("gr-opts", JSON.stringify(OPTS)); } catch (e) { /* ignoré */ }
+      if (state.dest && !state.nav) computeRoutes();
+    });
+  });
+
+  // ---------- Navigation ----------
+  function startNav() {
+    if (!state.routes.length) return;
+    unlockVoice();
+    keepAwake();
+    state.route = state.routes[state.routeIdx];
+    state.nav = true;
+    state.stepIdx = 0; state.spoken = {}; state.offCount = 0;
+    $("search").classList.add("hidden");
+    $("step").classList.remove("hidden");
+    $("stopNav").classList.remove("hidden");
+    state.followUser = true;
+    map.easeTo({ zoom: 17, pitch: 45, duration: 600 });
+    updateNavigation();
+    if (state.route.steps[0]) speak(`Itinéraire démarré. ${state.route.steps[0].text}`);
+  }
+
+  function stopNav() {
+    state.nav = false; state.route = null;
+    $("step").classList.add("hidden");
+    $("stopNav").classList.add("hidden");
+    $("search").classList.remove("hidden");
+    $("trip").textContent = "Position en cours";
+    map.easeTo({ bearing: 0, pitch: 0, duration: 500 });
+    map.getSource("routes").setData({ type: "FeatureCollection", features: [] });
+    destMarker.remove();
+    state.dest = null; state.routes = [];
+    $("results").innerHTML = "";
+    $("goBtn").classList.add("hidden");
+  }
+
+  async function reroute() {
+    if (state.rerouting || !state.nav) return;
+    state.rerouting = true;
+    status("Recalcul de l'itinéraire…", 0);
+    try {
+      await computeRoutes();
+      if (state.routes.length) {
+        state.routeIdx = 0; state.route = state.routes[0];
+        state.stepIdx = 0; state.spoken = {};
+        startNavKeepingView();
+        status("Itinéraire recalculé", 2500);
+      }
+    } finally { state.rerouting = false; state.offCount = 0; }
+  }
+  function startNavKeepingView() {
+    state.nav = true;
+    $("search").classList.add("hidden");
+    $("step").classList.remove("hidden");
+    $("stopNav").classList.remove("hidden");
+  }
+
+  function nearestIndex(pos, pts) {
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const d = distance(pos, pts[i]);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return { i: best, d: bestD };
+  }
+
+  function updateNavigation() {
+    const r = state.route;
+    if (!r || !state.pos) return;
+    const { i, d } = nearestIndex(state.pos, r.pts);
+
+    // Hors itinéraire
+    if (d > OFF_ROUTE_M) {
+      state.offCount++;
+      if (state.offCount >= OFF_ROUTE_COUNT) { reroute(); return; }
+    } else state.offCount = 0;
+
+    // Étape suivante
+    while (state.stepIdx < r.steps.length - 1 && i >= r.steps[state.stepIdx].idx) state.stepIdx++;
+    const step = r.steps[state.stepIdx];
+    const remaining = Math.max(0, r.total - r.cum[i]);
+    const toStep = Math.max(0, r.cum[step.idx] - r.cum[i]);
+
+    $("stepDist").textContent = state.stepIdx === r.steps.length - 1 ? `Arrivée dans ${fmtDist(remaining)}` : `Dans ${fmtDist(toStep)}`;
+    $("stepTxt").textContent = step.text;
+
+    // Annonces vocales
+    const sp = state.spoken[state.stepIdx] || (state.spoken[state.stepIdx] = {});
+    if (toStep <= 400 && toStep > 60 && !sp.far) { sp.far = true; speak(`Dans ${fmtDist(toStep)}, ${step.text}`); }
+    if (toStep <= 60 && !sp.near) { sp.near = true; speak(step.text); }
+
+    // Arrivée
+    if (remaining < 30 && state.stepIdx === r.steps.length - 1) {
+      speak("Vous êtes arrivé à destination.");
+      status("Arrivée à destination", 6000);
+      setTimeout(stopNav, 6000);
+      return;
+    }
+
+    const frac = remaining / r.total;
+    const etaSec = r.time * frac;
+    $("trip").innerHTML = `<strong>${fmtDuration(etaSec)}</strong>${fmtDist(remaining)} · arrivée ${fmtClock(new Date(Date.now() + etaSec * 1000))}`;
+  }
+
+  // ---------- Limite de vitesse (tronçon en cours, via Valhalla trace_attributes) ----------
+  async function refreshLimit() {
+    if (state.limitBusy || state.trail.length < 2) return;
+    state.limitBusy = true;
+    state.lastLimitAt = Date.now();
+    state.lastLimitPos = state.pos;
+    try {
+      const body = {
+        shape: state.trail.slice(-3), costing: "auto", shape_match: "map_snap",
+        filters: { attributes: ["edge.speed_limit"], action: "include" },
+      };
+      const res = await fetch(`${VALHALLA}/trace_attributes`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const withLimit = (data.edges || []).filter((e) => e && e.speed_limit);
+        state.limit = withLimit.length ? withLimit[withLimit.length - 1].speed_limit : null;
+      }
+    } catch (e) { /* on garde la dernière valeur */ }
+    finally { state.limitBusy = false; renderLimit(); }
+  }
+  function renderLimit() {
+    const el = $("limit");
+    if (state.limit) { el.textContent = state.limit; el.classList.remove("none"); }
+    else { el.textContent = "--"; el.classList.add("none"); }
+  }
+
+  // ---------- Radars ----------
+  function aheadRadars() {
+    const pos = state.pos;
+    const list = [];
+    const moving = state.course != null && (state.kmh ?? 0) >= MIN_KMH_HEADING;
+    for (const r of state.radars) {
+      if (Math.abs(r.lat - pos.lat) > 0.03 || Math.abs(r.lon - pos.lon) > 0.03) continue;
+      const d = distance(pos, r);
+      if (d > LIST_DIST) continue;
+      const ahead = !moving || angleDiff(state.course, bearing(pos, r)) <= AHEAD_ANGLE || d < 60;
+      if (ahead) list.push({ r, d });
+    }
+    return list.sort((a, b) => a.d - b.d);
+  }
+
+  function checkRadars() {
+    const pos = state.pos;
+    for (const id of [...state.alerted]) {
+      const r = state.radars.find((x) => x.id === id);
+      if (!r || distance(pos, r) > RESET_DIST) state.alerted.delete(id);
+    }
+    const list = aheadRadars();
+    const box = $("radar");
+    if (!list.length) { box.classList.add("hidden"); return; }
+
+    const { r, d } = list[0];
+    const dist = fmtDist(d);
+    const over = r.vma && state.kmh != null && state.kmh > r.vma + 5;
+    box.className = "card pill hidden" + (over ? " over" : " alert");
+    box.classList.remove("hidden");
+    box.innerHTML = `Radar fixe à ${dist}<small>${r.vma ? `Limite ${r.vma} km/h` : "Limite inconnue"}${over ? ` · vous roulez à ${Math.round(state.kmh)} km/h` : ""}</small>`;
+
+    if (d <= ALERT_DIST && !state.alerted.has(r.id)) {
+      state.alerted.add(r.id);
+      speak(`Radar fixe dans ${Math.round(d / 10) * 10} mètres${r.vma ? `, limite ${r.vma}` : ""}`);
+    }
+  }
+
+  // ---------- Position ----------
   function onPosition(p) {
     const now = { lat: p.coords.latitude, lon: p.coords.longitude };
-
-    // Cap : celui du GPS si fourni, sinon direction du déplacement.
     if (p.coords.speed != null && p.coords.speed >= 0) state.kmh = p.coords.speed * 3.6;
     if (state.prevPos && distance(state.prevPos, now) > 5) {
       state.course = bearing(state.prevPos, now);
       if (state.kmh == null) state.kmh = 0;
     }
-    if (p.coords.heading != null && !Number.isNaN(p.coords.heading) && (state.kmh ?? 0) >= MIN_KMH_FOR_HEADING) {
+    if (p.coords.heading != null && !Number.isNaN(p.coords.heading) && (state.kmh ?? 0) >= MIN_KMH_HEADING) {
       state.course = p.coords.heading;
+    }
+    if (!state.prevPos || distance(state.prevPos, now) > 5) {
+      state.trail.push(now);
+      if (state.trail.length > 6) state.trail.shift();
     }
     state.prevPos = now;
     state.pos = now;
 
-    ui.speed.textContent = state.kmh == null ? "--" : String(Math.round(state.kmh));
+    $("speed").textContent = state.kmh == null ? "--" : String(Math.round(state.kmh));
+    const over = state.limit && state.kmh != null && state.kmh > state.limit + 5;
+    $("speed").classList.toggle("over", !!over);
+
     userMarker.setLngLat([now.lon, now.lat]).addTo(map);
-    if (state.followUser) map.easeTo({ center: [now.lon, now.lat], duration: 600 });
+    if (state.nav) {
+      map.easeTo({
+        center: [now.lon, now.lat], zoom: 17, duration: 500,
+        bearing: state.course != null && (state.kmh ?? 0) >= MIN_KMH_HEADING ? state.course : map.getBearing(),
+      });
+    } else if (state.followUser) {
+      map.easeTo({ center: [now.lon, now.lat], duration: 600 });
+    }
+
+    if (!state.lastLimitAt || Date.now() - state.lastLimitAt > LIMIT_EVERY_MS ||
+        (state.lastLimitPos && distance(state.lastLimitPos, now) > LIMIT_EVERY_M)) refreshLimit();
 
     checkRadars();
+    if (state.nav) updateNavigation();
   }
 
-  function aheadRadars() {
-    const pos = state.pos;
-    if (!pos) return [];
-    const list = [];
-    for (const r of state.radars) {
-      // Filtre rapide par boîte englobante (≈ 2 km)
-      if (Math.abs(r.lat - pos.lat) > 0.03 || Math.abs(r.lon - pos.lon) > 0.03) continue;
-      const d = distance(pos, r);
-      if (d > LIST_DIST) continue;
-      const moving = state.course != null && (state.kmh ?? 0) >= MIN_KMH_FOR_HEADING;
-      const ahead = !moving || angleDiff(state.course, bearing(pos, r)) <= AHEAD_ANGLE || d < 60;
-      if (ahead) list.push({ r, d });
-    }
-    list.sort((a, b) => a.d - b.d);
-    return list;
-  }
-
-  function checkRadars() {
-    const list = aheadRadars();
-
-    // Libère les radars dépassés ou éloignés pour pouvoir les annoncer à nouveau.
-    for (const id of [...state.alerted]) {
-      const r = state.radars.find((x) => x.id === id);
-      if (!r || distance(state.pos, r) > RESET_DIST) state.alerted.delete(id);
-    }
-
-    if (!list.length) {
-      if (state.active) showBanner("", "Route dégagée", "Aucun radar fixe à moins de 1 km devant vous.");
-      return;
-    }
-
-    const { r, d } = list[0];
-    const vma = r.vma;
-    const over = vma && state.kmh != null && state.kmh > vma + 5;
-    const dist = Math.round(d / 10) * 10;
-    const sub = vma ? `Limite ${vma} km/h` : "Limite inconnue";
-
-    if (over) {
-      showBanner("over", `Radar à ${dist} m`, `${sub} · vous roulez à ${Math.round(state.kmh)} km/h`);
-    } else {
-      showBanner("alert", `Radar fixe à ${dist} m`, sub);
-    }
-
-    if (d <= ALERT_DIST && !state.alerted.has(r.id)) {
-      state.alerted.add(r.id);
-      speak(`Radar fixe dans ${dist} mètres${vma ? `, limite ${vma}` : ""}`);
-    }
-  }
-
-  // ---------- Démarrage / arrêt ----------
-  function start() {
-    if (!("geolocation" in navigator)) {
-      setNote("La géolocalisation n'est pas disponible sur cet appareil.");
-      return;
-    }
-    unlockVoice();
+  function startTracking() {
+    if (!("geolocation" in navigator)) { status("Géolocalisation indisponible sur cet appareil", 0); return; }
     keepAwake();
-    state.active = true;
-    state.followUser = true;
-    ui.toggle.textContent = "Arrêter";
-    ui.toggle.classList.add("ghost");
-    ui.info.innerHTML = "Suivi actif. Gardez l'app ouverte, l'écran allumé, pour les alertes.";
-    state.watchId = navigator.geolocation.watchPosition(onPosition, (err) => {
-      const msg = err.code === 1 ? "Localisation refusée. Autorisez-la dans les réglages du navigateur."
-                                 : "Position indisponible pour le moment.";
-      setNote(msg);
+    navigator.geolocation.watchPosition(onPosition, (err) => {
+      status(err.code === 1 ? "Localisation refusée : autorisez-la dans les réglages" : "Position indisponible pour le moment", 0);
     }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
-    showBanner("", "Recherche du GPS…", "");
   }
 
-  function stop() {
-    state.active = false;
-    if (state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
-    state.watchId = null;
-    state.alerted.clear();
-    releaseAwake();
-    ui.toggle.textContent = "Démarrer";
-    ui.toggle.classList.remove("ghost");
-    ui.info.innerHTML = "Suivi arrêté. Appuyez sur <strong>Démarrer</strong> pour reprendre.";
-    ui.speed.textContent = "--";
-    hideBanner();
-  }
+  // Marqueur de position : suit le GPS, sans attendre la carte
+  setInterval(() => { renderLimit(); }, 5000);
 
-  ui.toggle.addEventListener("click", () => (state.active ? stop() : start()));
-  ui.locate.addEventListener("click", () => {
+  // ---------- Boutons ----------
+  $("goBtn").addEventListener("click", startNav);
+  $("stopNav").addEventListener("click", stopNav);
+  $("mute").addEventListener("click", () => {
+    state.muted = !state.muted;
+    $("mute").innerHTML = state.muted ? "&#128263;" : "&#128266;";
+    $("mute").setAttribute("aria-label", state.muted ? "Activer la voix" : "Couper la voix");
+  });
+  $("locate").addEventListener("click", () => {
     state.followUser = true;
-    if (state.pos) map.easeTo({ center: [state.pos.lon, state.pos.lat], zoom: 15, duration: 500 });
+    if (state.pos) map.easeTo({ center: [state.pos.lon, state.pos.lat], zoom: 16, duration: 500 });
   });
 
-  // Service worker (mode hors ligne de la coquille de l'app)
+  // Démarrage du suivi GPS au chargement (la voix se débloque au premier clic utilisateur)
+  startTracking();
+  renderLimit();
+
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
