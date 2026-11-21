@@ -272,7 +272,7 @@ button:disabled{opacity:.5}
     const vma = r.vma;
     const over = vma && state.kmh != null && state.kmh > vma + 5;
     const dist = Math.round(d / 10) * 10;
-    const sub = `Limite ${vma ?? "inconnue"} km/h`;
+    const sub = vma ? `Limite ${vma} km/h` : "Limite inconnue";
 
     if (over) {
       showBanner("over", `Radar à ${dist} m`, `${sub} · vous roulez à ${Math.round(state.kmh)} km/h`);
