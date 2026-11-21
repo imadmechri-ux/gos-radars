@@ -80,6 +80,11 @@ button:disabled{opacity:.5}
 .hidden{display:none !important}
 .fab.report{bottom:calc(env(safe-area-inset-bottom) + 160px);background:var(--gold);color:#fff;border-color:transparent;font-weight:800}
 .fab:disabled{opacity:.45}
+.fab.alt{left:12px;right:auto;bottom:calc(env(safe-area-inset-bottom) + 104px);font-size:18px}
+.sheet2{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 100px);padding:12px;max-height:58vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.sheet2 .title{font-weight:800;font-size:15px}
+.sheet2-actions{display:flex;gap:8px}
+.sheet2-actions button{flex:1}
 .sheet{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 100px);padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .sheet .title{grid-column:1/-1;font-weight:800;font-size:15px}
 .sheet button{background:var(--bg);color:var(--ink);border:1px solid var(--line);font-size:15px;min-height:52px;text-align:left}
@@ -130,6 +135,16 @@ button:disabled{opacity:.5}
 
 <button class="fab report" id="reportBtn" aria-label="Signaler un événement" title="Signaler">!</button>
 <button class="fab" id="locate" aria-label="Me recentrer" title="Me recentrer">&#9678;</button>
+<button class="fab alt" id="altBtn" aria-label="Autres itinéraires" title="Autres itinéraires">&#8644;</button>
+
+<div id="altSheet" class="card sheet2 hidden" role="dialog" aria-label="Autres itinéraires">
+  <div class="title">Autres itinéraires</div>
+  <div id="altList" class="results"></div>
+  <div class="sheet2-actions">
+    <button type="button" id="altGo">Suivre cet itinéraire</button>
+    <button type="button" class="ghost" id="altClose">Fermer</button>
+  </div>
+</div>
 
 <div id="sheet" class="card sheet hidden" role="dialog" aria-label="Signaler un événement">
   <div class="title">Signaler sur ma position</div>
@@ -382,78 +397,171 @@ button:disabled{opacity:.5}
     };
   }
 
-  async function computeRoutes() {
-    if (!state.pos) { status("Position GPS indisponible. Patientez quelques secondes."); return; }
-    if (!state.dest) return;
-    status("Calcul de l'itinéraire…", 0);
-    const body = {
+  // Trois itinéraires différents : le recommandé, puis sans péage, puis sans autoroute.
+  // Chaque variante reprend les préférences de l'utilisateur, puis ajoute une contrainte.
+  const VARIANTS = [
+    { label: "Recommandé", over: {} },
+    { label: "Sans péage", over: { tolls: true } },
+    { label: "Sans autoroute", over: { highways: true } },
+  ];
+
+  function routeBody(over) {
+    const o = Object.assign({}, OPTS, over);
+    return {
       locations: [{ lat: state.pos.lat, lon: state.pos.lon }, { lat: state.dest.lat, lon: state.dest.lon }],
       costing: "auto",
       costing_options: { auto: {
-        use_tolls: OPTS.tolls ? 0 : 1,
-        use_highways: OPTS.highways ? 0 : 1,
-        use_ferry: OPTS.ferries ? 0 : 1,
-        exclude_unpaved: OPTS.unpaved,
+        use_tolls: o.tolls ? 0 : 1,
+        use_highways: o.highways ? 0 : 1,
+        use_ferry: o.ferries ? 0 : 1,
+        exclude_unpaved: o.unpaved,
       } },
       alternates: 2,
       directions_options: { units: "kilometers", language: "fr-FR" },
     };
+  }
+
+  async function fetchRoutes(body) {
+    const res = await fetch(`${VALHALLA}/route`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.trip) throw new Error(data.error || "route");
+    return [data.trip, ...((data.alternates || []).map((a) => a.trip))].filter(Boolean).map(parseTrip);
+  }
+
+  // Jusqu'à 3 itinéraires distincts (deux trajets de même durée et distance sont des doublons).
+  // D'abord le trajet principal de chaque variante, puis les alternatives.
+  async function fetchRouteVariants() {
+    const settled = await Promise.allSettled(VARIANTS.map((v) => fetchRoutes(routeBody(v.over))));
+    const kept = [];
+    const add = (r, label) => {
+      const dup = kept.some((k) => Math.abs(k.time - r.time) < 60 && Math.abs(k.km - r.km) < 0.5);
+      if (!dup && kept.length < 3) { r.label = label; kept.push(r); }
+    };
+    settled.forEach((res, vi) => { if (res.status === "fulfilled" && res.value[0]) add(res.value[0], VARIANTS[vi].label); });
+    settled.forEach((res) => { if (res.status === "fulfilled") res.value.slice(1).forEach((r) => add(r, "Alternative")); });
+    return kept;
+  }
+
+  async function computeRoutes() {
+    if (!state.pos) { status("Position GPS indisponible. Patientez quelques secondes."); return false; }
+    if (!state.dest) return false;
+    status("Calcul des itinéraires…", 0);
     try {
-      const res = await fetch(`${VALHALLA}/route`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.trip) throw new Error(data.error || "route");
-      const trips = [data.trip, ...((data.alternates || []).map((a) => a.trip))].filter(Boolean);
-      state.routes = trips.map(parseTrip);
+      const routes = await fetchRouteVariants();
+      if (!routes.length) throw new Error("none");
+      state.routes = routes;
       state.routeIdx = 0;
       $("note").classList.add("hidden");
       renderRoutes();
       selectRoute(0);
+      return true;
     } catch (err) {
       state.routes = [];
       $("results").innerHTML = "";
       status("Aucun itinéraire avec ces options. Essayez d'en désactiver une.", 6000);
+      return false;
     }
   }
 
-  function renderRoutes() {
-    const box = $("results");
+  function renderList(box, list, sel, onPick) {
     box.innerHTML = "";
     const now = Date.now();
-    state.routes.forEach((r, i) => {
+    list.forEach((r, i) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "route";
-      b.setAttribute("aria-selected", String(i === state.routeIdx));
+      b.dataset.i = i;
+      b.setAttribute("aria-selected", String(i === sel));
       const tags = [r.toll ? "péages" : "sans péage", r.highway ? "autoroute" : "hors autoroute", r.ferry ? "ferry" : ""].filter(Boolean).join(" · ");
       const arrive = new Date(now + r.time * 1000);
       b.innerHTML = `<div><div class="t">${fmtDuration(r.time)}</div><div class="m">${fmtDist(r.km * 1000)} · arrivée ${fmtClock(arrive)}</div></div>
-                     <div class="badges">${i === 0 ? "Recommandé<br>" : ""}${tags}</div>`;
-      b.addEventListener("click", () => selectRoute(i));
+                     <div class="badges">${r.label || ""}<br>${tags}</div>`;
+      b.addEventListener("click", () => onPick(i));
       box.appendChild(b);
     });
+  }
+
+  function renderRoutes() {
+    renderList($("results"), state.routes, state.routeIdx, selectRoute);
     $("goBtn").classList.toggle("hidden", !state.routes.length);
   }
 
-  function selectRoute(i) {
-    state.routeIdx = i;
-    const r = state.routes[i];
-    if (!r) return;
-    // Mise à jour des tracés
-    map.getSource("routes").setData({
+  function drawLines(list, sel) {
+    const src = map.getSource("routes");
+    if (!src) return;
+    src.setData({
       type: "FeatureCollection",
-      features: state.routes.map((x, j) => ({
-        type: "Feature", properties: { sel: j === i },
+      features: list.map((x, j) => ({
+        type: "Feature", properties: { sel: j === sel },
         geometry: { type: "LineString", coordinates: x.pts.map((p) => [p.lon, p.lat]) },
       })).sort((a, b) => (a.properties.sel ? 1 : 0) - (b.properties.sel ? 1 : 0)),
     });
-    [...$("results").children].forEach((el, j) => el.setAttribute("aria-selected", String(j === i)));
+  }
+
+  function selectRoute(i) {
+    const r = state.routes[i];
+    if (!r) return;
+    state.routeIdx = i;
+    drawLines(state.routes, i);
+    renderRoutes();
     if (state.nav) return; // pendant le guidage, on ne recadre pas la carte
     const bounds = new maplibregl.LngLatBounds();
     r.pts.forEach((p) => bounds.extend([p.lon, p.lat]));
     state.followUser = false;
     map.fitBounds(bounds, { padding: { top: 260, bottom: 170, left: 40, right: 40 }, duration: 600 });
+  }
+
+  // ---------- Autres itinéraires, à tout moment ----------
+  async function showAlternatives() {
+    if (!state.dest || !state.pos) { status("Choisissez d'abord une destination", 4000); return; }
+    status("Recherche de 3 itinéraires…", 0);
+    try {
+      const alts = await fetchRouteVariants();
+      if (!alts.length) throw new Error("none");
+      state.altRoutes = alts;
+      state.altIdx = 0;
+      $("note").classList.add("hidden");
+      renderAlternatives();
+      $("altSheet").classList.remove("hidden");
+    } catch (e) {
+      status("Aucun autre itinéraire trouvé", 4000);
+    }
+  }
+
+  function renderAlternatives() {
+    renderList($("altList"), state.altRoutes, state.altIdx, pickAlternative);
+    drawLines(state.altRoutes, state.altIdx);
+  }
+
+  function pickAlternative(i) {
+    state.altIdx = i;
+    renderAlternatives();
+  }
+
+  function closeAlternatives() {
+    $("altSheet").classList.add("hidden");
+    if (state.nav && state.route) drawLines([state.route], 0);
+    else if (state.routes.length) drawLines(state.routes, state.routeIdx);
+  }
+
+  function chooseAlternative() {
+    const r = state.altRoutes[state.altIdx];
+    if (!r) return;
+    $("altSheet").classList.add("hidden");
+    if (state.nav) {
+      state.route = r;
+      state.stepIdx = 0; state.spoken = {}; state.offCount = 0;
+      drawLines([r], 0);
+      updateNavigation();
+      speak(`Nouvel itinéraire : ${r.label.toLowerCase()}`);
+    } else {
+      state.routes = state.altRoutes;
+      state.routeIdx = state.altIdx;
+      selectRoute(state.routeIdx);
+      status(`Itinéraire « ${r.label} » sélectionné`, 2500);
+    }
   }
 
   // Changement d'options : recalcul immédiat si un trajet est en cours de préparation
@@ -507,6 +615,7 @@ button:disabled{opacity:.5}
       await computeRoutes();
       if (state.routes.length) {
         state.routeIdx = 0; state.route = state.routes[0];
+        drawLines([state.route], 0);
         state.stepIdx = 0; state.spoken = {};
         startNavKeepingView();
         status("Itinéraire recalculé", 2500);
@@ -849,6 +958,9 @@ button:disabled{opacity:.5}
   });
 
   // ---------- Boutons ----------
+  $("altBtn").addEventListener("click", showAlternatives);
+  $("altClose").addEventListener("click", closeAlternatives);
+  $("altGo").addEventListener("click", chooseAlternative);
   $("goBtn").addEventListener("click", startNav);
   $("stopNav").addEventListener("click", stopNav);
   $("mute").addEventListener("click", () => {
