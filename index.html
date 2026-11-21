@@ -47,6 +47,8 @@ button:disabled{opacity:.5}
 .step .arrow{font-size:34px;line-height:1;min-width:44px;text-align:center}
 .step .dist{font-size:22px;font-weight:800}
 .step .txt{font-size:14px;opacity:.95;margin-top:2px}
+.step{position:relative;padding-right:60px}
+.gear-nav{position:absolute;top:10px;right:10px;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;background:rgba(255,255,255,.28);color:var(--accent-ink);font-size:22px}
 .step .trip{white-space:normal;overflow:visible;font-size:13px;font-weight:600;margin-top:4px;color:var(--accent-ink);opacity:.95}
 .pill{padding:10px 14px;font-size:15px;font-weight:700}
 .pill.alert{border-color:var(--gold)}
@@ -134,6 +136,7 @@ button:disabled{opacity:.5}
       <div class="txt" id="stepTxt"></div>
       <div class="trip" id="trip"></div>
     </div>
+    <button type="button" class="gear-nav" id="settingsNav" aria-label="Paramètres" title="Paramètres">&#9881;</button>
   </div>
 
   <div id="radar" class="card pill hidden" role="status" aria-live="polite"></div>
@@ -1158,6 +1161,7 @@ button:disabled{opacity:.5}
   $("togGuide").addEventListener("click", () => { SOUND.guide = !SOUND.guide; saveSound(); syncSoundUI(); });
   $("togAlerts").addEventListener("click", () => { SOUND.alerts = !SOUND.alerts; saveSound(); syncSoundUI(); });
   $("settingsBtn").addEventListener("click", () => $("settings").classList.remove("hidden"));
+  $("settingsNav").addEventListener("click", () => $("settings").classList.remove("hidden"));
   $("settingsClose").addEventListener("click", () => $("settings").classList.add("hidden"));
   syncSoundUI();
   $("locate").addEventListener("click", () => {
