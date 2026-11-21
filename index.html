@@ -74,13 +74,13 @@ button:disabled{opacity:.5}
 .trip{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trip strong{color:var(--ink);font-size:17px;display:block}
 .bar .icon{min-width:44px;padding:10px;font-size:18px}
+.bar .alt{min-width:48px;min-height:48px;padding:0;font-size:22px;flex:0 0 auto}
 .note{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 96px);font-size:13px;color:var(--ink);text-align:center;pointer-events:none}
 .note span{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 10px;display:inline-block}
 .fab{position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom) + 104px);width:46px;min-width:46px;min-height:46px;padding:0;border-radius:50%;background:var(--surface);color:var(--ink);border:1px solid var(--line);font-size:20px}
 .hidden{display:none !important}
 .fab.report{bottom:calc(env(safe-area-inset-bottom) + 160px);background:var(--gold);color:#fff;border-color:transparent;font-weight:800}
 .fab:disabled{opacity:.45}
-.fab.alt{left:12px;right:auto;bottom:calc(env(safe-area-inset-bottom) + 104px);font-size:18px}
 .sheet2{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 100px);padding:12px;max-height:58vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
 .sheet2 .title{font-weight:800;font-size:15px}
 .sheet2-actions{display:flex;gap:8px}
@@ -135,8 +135,6 @@ button:disabled{opacity:.5}
 
 <button class="fab report" id="reportBtn" aria-label="Signaler un événement" title="Signaler">!</button>
 <button class="fab" id="locate" aria-label="Me recentrer" title="Me recentrer">&#9678;</button>
-<button class="fab alt" id="altBtn" aria-label="Autres itinéraires" title="Autres itinéraires">&#8644;</button>
-
 <div id="altSheet" class="card sheet2 hidden" role="dialog" aria-label="Autres itinéraires">
   <div class="title">Autres itinéraires</div>
   <div id="altList" class="results"></div>
@@ -165,6 +163,7 @@ button:disabled{opacity:.5}
   <div class="limit none" id="limit" aria-label="Limite de vitesse">--</div>
   <div class="trip" id="trip">Position en cours</div>
   <button class="ghost icon" id="mute" aria-label="Couper la voix" title="Voix">&#128266;</button>
+  <button class="ghost alt" id="altBtn" aria-label="Autres itinéraires" title="Autres itinéraires">&#8916;</button>
   <button id="stopNav" class="hidden" type="button">Quitter</button>
 </div>
 
