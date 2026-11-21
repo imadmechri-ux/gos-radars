@@ -75,6 +75,11 @@ create trigger report_votes_apply after insert or update on public.report_votes
 alter table public.reports enable row level security;
 alter table public.report_votes enable row level security;
 
+-- Droits d'accès à l'API (nécessaires sur les projets Supabase récents).
+-- Les règles RLS ci-dessous restent les vraies protections.
+grant select, insert on public.reports to anon, authenticated;
+grant select, insert, update on public.report_votes to anon, authenticated;
+
 drop policy if exists "lire les signalements actifs" on public.reports;
 create policy "lire les signalements actifs" on public.reports
   for select using (expires_at > now());
