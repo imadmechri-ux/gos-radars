@@ -8,7 +8,7 @@ options:
 packages:
   MapLibre:
     url: https://github.com/maplibre/maplibre-gl-native-distribution
-    # À vérifier : version actuelle du paquet MapLibre Native pour iOS.
+    # Version vérifiée : 6.31.0, dernière release trouvée.
     from: "6.31.0"
 targets:
   GosRadars:
