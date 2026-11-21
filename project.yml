@@ -1,0 +1,30 @@
+# Projet Xcode généré par XcodeGen.
+# Sur le Mac : `brew install xcodegen`, puis `xcodegen generate` à la racine.
+name: GosRadars
+options:
+  bundleIdPrefix: com.imadmechri
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    # À vérifier : version actuelle du paquet MapLibre Native pour iOS.
+    from: "6.0.0"
+targets:
+  GosRadars:
+    type: application
+    platform: iOS
+    sources: [GosRadars]
+    dependencies:
+      - package: MapLibre
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.imadmechri.gosradars
+        INFOPLIST_FILE: GosRadars/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+  GosRadarsTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [GosRadarsTests]
+    dependencies:
+      - target: GosRadars

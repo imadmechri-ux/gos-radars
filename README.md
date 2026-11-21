@@ -49,3 +49,13 @@ GosRadars/
 ## Statut
 
 Démarrage : structure et documentation uniquement. Le code Swift viendra avec le jalon 1, à compiler et tester sur Mac.
+
+## Jalon 1 : mise en place sur Mac
+
+1. `brew install xcodegen`
+2. `xcodegen generate` à la racine du dépôt
+3. Ouvrir `GosRadars.xcodeproj`, vérifier la version du paquet MapLibre dans `project.yml`
+4. Lancer sur iPhone (compte Apple Developer requis pour l'appareil réel)
+5. Autoriser la position « Pendant l'utilisation », puis « Toujours » pour le suivi en arrière-plan
+
+Le jalon 1 naffiche
