@@ -1,4 +1,4 @@
-const CACHE = "gos-radars-v4";
+const CACHE = "gos-radars-v5";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "data/radars.json", "config.js"];
 
 self.addEventListener("install", (e) => {

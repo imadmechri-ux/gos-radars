@@ -41,6 +41,7 @@ button:disabled{opacity:.5}
 .step .arrow{font-size:34px;line-height:1;min-width:44px;text-align:center}
 .step .dist{font-size:22px;font-weight:800}
 .step .txt{font-size:14px;opacity:.95;margin-top:2px}
+.step .trip{white-space:normal;overflow:visible;font-size:13px;font-weight:600;margin-top:4px;color:var(--accent-ink);opacity:.95}
 .pill{padding:10px 14px;font-size:15px;font-weight:700}
 .pill.alert{border-color:var(--gold)}
 .pill.over{border-color:var(--danger);color:var(--danger)}
@@ -64,7 +65,7 @@ button:disabled{opacity:.5}
 .dests button{background:var(--bg);color:var(--ink);border:1px solid var(--line);text-align:left;font-weight:500;font-size:14px}
 
 /* Barre basse */
-.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.12);display:flex;align-items:center;gap:10px}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 10px calc(env(safe-area-inset-bottom) + 10px);background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:space-between;gap:8px}
 .speedbox{min-width:72px;text-align:center}
 .speed{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
 .speed.over{color:var(--danger)}
@@ -74,7 +75,8 @@ button:disabled{opacity:.5}
 .trip{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trip strong{color:var(--ink);font-size:17px;display:block}
 .bar .icon{min-width:44px;padding:10px;font-size:18px}
-.bar .alt{min-width:48px;min-height:48px;padding:0;font-size:22px;flex:0 0 auto}
+.bar .alt{width:48px;min-width:48px;min-height:48px;padding:0;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.bar #stopNav{flex:0 0 auto;padding:12px 14px}
 .note{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 96px);font-size:13px;color:var(--ink);text-align:center;pointer-events:none}
 .note span{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 10px;display:inline-block}
 .fab{position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom) + 104px);width:46px;min-width:46px;min-height:46px;padding:0;border-radius:50%;background:var(--surface);color:var(--ink);border:1px solid var(--line);font-size:20px}
@@ -105,6 +107,7 @@ button:disabled{opacity:.5}
     <div style="min-width:0">
       <div class="dist" id="stepDist"></div>
       <div class="txt" id="stepTxt"></div>
+      <div class="trip" id="trip"></div>
     </div>
   </div>
 
@@ -161,9 +164,8 @@ button:disabled{opacity:.5}
     <div class="unit">km/h</div>
   </div>
   <div class="limit none" id="limit" aria-label="Limite de vitesse">--</div>
-  <div class="trip" id="trip">Position en cours</div>
   <button class="ghost icon" id="mute" aria-label="Couper la voix" title="Voix">&#128266;</button>
-  <button class="ghost alt" id="altBtn" aria-label="Autres itinéraires" title="Autres itinéraires">&#8916;</button>
+  <button class="ghost alt" id="altBtn" aria-label="Autres itinéraires" title="Autres itinéraires"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21v-8"/><path d="M12 13 6 4"/><path d="M12 13l6-9"/></svg></button>
   <button id="stopNav" class="hidden" type="button">Quitter</button>
 </div>
 
