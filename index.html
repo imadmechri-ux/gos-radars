@@ -78,6 +78,17 @@ button:disabled{opacity:.5}
 .note span{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 10px;display:inline-block}
 .fab{position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom) + 104px);width:46px;min-width:46px;min-height:46px;padding:0;border-radius:50%;background:var(--surface);color:var(--ink);border:1px solid var(--line);font-size:20px}
 .hidden{display:none !important}
+.fab.report{bottom:calc(env(safe-area-inset-bottom) + 160px);background:var(--gold);color:#fff;border-color:transparent;font-weight:800}
+.fab:disabled{opacity:.45}
+.sheet{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 100px);padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sheet .title{grid-column:1/-1;font-weight:800;font-size:15px}
+.sheet button{background:var(--bg);color:var(--ink);border:1px solid var(--line);font-size:15px;min-height:52px;text-align:left}
+.sheet .wide{grid-column:1/-1;text-align:center;background:transparent;color:var(--muted)}
+.rpill{display:flex;flex-direction:column;gap:8px}
+.rpill .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.rpill .votes{display:flex;gap:8px;align-items:center}
+.rpill .votes span{font-size:13px;color:var(--muted);margin-right:auto}
+.rpill .votes button{min-height:38px;padding:8px 12px;font-size:14px}
 </style>
 </head>
 <body>
@@ -93,6 +104,7 @@ button:disabled{opacity:.5}
   </div>
 
   <div id="radar" class="card pill hidden" role="status" aria-live="polite"></div>
+  <div id="reportPill" class="card pill rpill hidden" role="status" aria-live="polite"></div>
 
   <section id="search" class="card search">
     <form id="searchForm">
@@ -116,7 +128,18 @@ button:disabled{opacity:.5}
   </section>
 </div>
 
+<button class="fab report" id="reportBtn" aria-label="Signaler un événement" title="Signaler">!</button>
 <button class="fab" id="locate" aria-label="Me recentrer" title="Me recentrer">&#9678;</button>
+
+<div id="sheet" class="card sheet hidden" role="dialog" aria-label="Signaler un événement">
+  <div class="title">Signaler sur ma position</div>
+  <button type="button" data-kind="radar_mobile">📷 Radar mobile</button>
+  <button type="button" data-kind="controle">👮 Contrôle police</button>
+  <button type="button" data-kind="accident">💥 Accident</button>
+  <button type="button" data-kind="bouchon">🚗 Bouchon</button>
+  <button type="button" data-kind="danger">⚠️ Danger sur la route</button>
+  <button type="button" class="wide" id="sheetClose">Annuler</button>
+</div>
 <div class="note hidden" id="note"><span id="noteText"></span></div>
 
 <div class="bar" id="bar">
@@ -131,6 +154,8 @@ button:disabled{opacity:.5}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
 <script>
 (() => {
   "use strict";
@@ -281,6 +306,16 @@ button:disabled{opacity:.5}
         "line-opacity": ["case", ["get", "sel"], 0.95, 0.6],
       },
     }, "radars");
+
+    map.addSource("reports", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({
+      id: "reports", type: "circle", source: "reports",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 6, 4, 12, 8, 15, 11],
+        "circle-color": ["get", "color"], "circle-stroke-color": "#FFFFFF", "circle-stroke-width": 2,
+      },
+    });
+    updateReportLayer();
   });
 
   // ---------- Recherche d'adresse ----------
@@ -635,6 +670,13 @@ button:disabled{opacity:.5}
 
     checkRadars();
     if (state.nav) updateNavigation();
+    if (community.ready) {
+      if (!community.lastFetchPos || distance(community.lastFetchPos, now) > 3000) {
+        community.lastFetchPos = now;
+        refreshReports(true);
+      } else refreshReports(false);
+      checkReports();
+    }
   }
 
   function startTracking() {
@@ -647,6 +689,164 @@ button:disabled{opacity:.5}
 
   // Marqueur de position : suit le GPS, sans attendre la carte
   setInterval(() => { renderLimit(); }, 5000);
+
+  // ---------- Communauté (Supabase) ----------
+  const KINDS = {
+    radar_mobile: { label: "Radar mobile", icon: "📷", color: "#7B3FBF", say: "radar mobile" },
+    controle:     { label: "Contrôle police", icon: "👮", color: "#1F5FBF", say: "contrôle de police" },
+    accident:     { label: "Accident", icon: "💥", color: "#B3402E", say: "accident" },
+    bouchon:      { label: "Bouchon", icon: "🚗", color: "#D98B00", say: "bouchon" },
+    danger:       { label: "Danger", icon: "⚠️", color: "#B3402E", say: "danger" },
+  };
+  const cfg = window.GR_CONFIG || {};
+  const sb = (cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase)
+    ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } })
+    : null;
+  const community = { ready: false, uid: null, reports: [], lastFetchAt: 0, lastFetchPos: null,
+                      asked: new Set(), announced: new Set(), lastSent: {}, pillId: null };
+
+  async function initCommunity() {
+    if (!sb) {
+      $("reportBtn").disabled = true;
+      $("reportBtn").title = "Communauté non configurée (voir config.js)";
+      return;
+    }
+    try {
+      let { data } = await sb.auth.getSession();
+      if (!data.session) {
+        const res = await sb.auth.signInAnonymously();
+        if (res.error) throw res.error;
+        data = res.data;
+      }
+      community.uid = data.session.user.id;
+      community.ready = true;
+      sb.channel("reports-live")
+        .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, () => refreshReports(true))
+        .subscribe();
+      refreshReports(true);
+    } catch (e) {
+      status("Communauté indisponible (voir la configuration Supabase)", 6000);
+    }
+  }
+
+  async function refreshReports(force) {
+    if (!community.ready || !state.pos) return;
+    const now = Date.now();
+    if (!force && now - community.lastFetchAt < 60000) return;
+    community.lastFetchAt = now;
+    const p = state.pos, dLat = 0.1, dLon = 0.15; // zone d'environ 11 km autour de la position
+    const { data, error } = await sb.from("reports")
+      .select("id,kind,lat,lon,created_at,expires_at,confirmations,denials")
+      .gte("lat", p.lat - dLat).lte("lat", p.lat + dLat)
+      .gte("lon", p.lon - dLon).lte("lon", p.lon + dLon)
+      .limit(500);
+    if (error || !data) return;
+    community.reports = data;
+    updateReportLayer();
+  }
+
+  function updateReportLayer() {
+    const src = map.getSource("reports");
+    if (!src) return;
+    const nowMs = Date.now();
+    src.setData({
+      type: "FeatureCollection",
+      features: community.reports
+        .filter((r) => new Date(r.expires_at).getTime() > nowMs && KINDS[r.kind])
+        .map((r) => ({ type: "Feature", properties: { id: r.id, color: KINDS[r.kind].color },
+          geometry: { type: "Point", coordinates: [r.lon, r.lat] } })),
+    });
+  }
+
+  async function sendReport(kind) {
+    if (!community.ready) { status("Communauté non configurée", 4000); return; }
+    if (!state.pos) { status("Position GPS indisponible", 4000); return; }
+    const last = community.lastSent[kind] || 0;
+    if (Date.now() - last < 30000) { status("Attendez un instant avant un nouveau signalement", 3000); return; }
+    community.lastSent[kind] = Date.now();
+    const { error } = await sb.from("reports").insert({ kind, lat: state.pos.lat, lon: state.pos.lon });
+    if (error) {
+      status(/Trop de signalements/.test(error.message) ? error.message : "Signalement impossible", 5000);
+      return;
+    }
+    status(`Merci : ${KINDS[kind].say} signalé`, 3000);
+    refreshReports(true);
+  }
+
+  async function vote(reportId, stillThere) {
+    const { error } = await sb.from("report_votes").upsert(
+      { report_id: reportId, user_id: community.uid, still_there: stillThere },
+      { onConflict: "report_id,user_id" });
+    if (error) { status("Vote impossible", 3000); return; }
+    community.asked.add(reportId);
+    community.pillId = null;
+    $("reportPill").classList.add("hidden");
+    status(stillThere ? "Merci, signalement confirmé" : "Merci, signalement retiré", 2500);
+    refreshReports(true);
+  }
+
+  // Signalements proches devant soi : annonce et question « toujours là ? »
+  function checkReports() {
+    const pos = state.pos;
+    const now = Date.now();
+    const moving = state.course != null && (state.kmh ?? 0) >= MIN_KMH_HEADING;
+    let best = null;
+    for (const r of community.reports) {
+      if (!KINDS[r.kind] || community.asked.has(r.id) || new Date(r.expires_at).getTime() <= now) continue;
+      const d = distance(pos, { lat: r.lat, lon: r.lon });
+      if (d > LIST_DIST) continue;
+      const ahead = !moving || d < 60 || angleDiff(state.course, bearing(pos, { lat: r.lat, lon: r.lon })) <= AHEAD_ANGLE;
+      if (!ahead) continue;
+      if (!best || d < best.d) best = { r, d };
+    }
+    const pill = $("reportPill");
+    if (!best) { pill.classList.add("hidden"); community.pillId = null; return; }
+
+    const { r, d } = best;
+    const k = KINDS[r.kind];
+    if (community.pillId !== r.id) {
+      community.pillId = r.id;
+      pill.innerHTML = "";
+      const row = document.createElement("div");
+      row.className = "row";
+      const title = document.createElement("strong");
+      title.textContent = `${k.icon} ${k.label}`;
+      const dist = document.createElement("span");
+      dist.id = "reportDist";
+      dist.style.color = "var(--muted)";
+      row.append(title, dist);
+      const votes = document.createElement("div");
+      votes.className = "votes";
+      const q = document.createElement("span");
+      q.textContent = "Toujours là ?";
+      const yes = document.createElement("button");
+      yes.type = "button"; yes.className = "ghost"; yes.textContent = "Oui";
+      yes.addEventListener("click", () => vote(r.id, true));
+      const no = document.createElement("button");
+      no.type = "button"; no.className = "ghost"; no.textContent = "Non";
+      no.addEventListener("click", () => vote(r.id, false));
+      votes.append(q, yes, no);
+      pill.append(row, votes);
+    }
+    $("reportDist").textContent = `à ${fmtDist(d)}`;
+    pill.classList.remove("hidden");
+    if (d <= 500 && !community.announced.has(r.id)) {
+      community.announced.add(r.id);
+      speak(`Attention, ${k.say} signalé à ${Math.round(d / 10) * 10} mètres`);
+    }
+  }
+
+  $("reportBtn").addEventListener("click", () => {
+    if (!community.ready) { status("Communauté non configurée", 4000); return; }
+    $("sheet").classList.remove("hidden");
+  });
+  $("sheetClose").addEventListener("click", () => $("sheet").classList.add("hidden"));
+  document.querySelectorAll("#sheet [data-kind]").forEach((b) => {
+    b.addEventListener("click", () => {
+      $("sheet").classList.add("hidden");
+      sendReport(b.dataset.kind);
+    });
+  });
 
   // ---------- Boutons ----------
   $("goBtn").addEventListener("click", startNav);
@@ -664,6 +864,7 @@ button:disabled{opacity:.5}
   // Démarrage du suivi GPS au chargement (la voix se débloque au premier clic utilisateur)
   startTracking();
   renderLimit();
+  initCommunity();
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
