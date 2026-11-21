@@ -70,6 +70,7 @@ button:disabled{opacity:.5}
 .dests{display:flex;flex-direction:column;gap:6px}
 .dests button{background:var(--bg);color:var(--ink);border:1px solid var(--line);text-align:left;font-weight:500;font-size:14px}
 .favbtn{width:100%}
+.search .gear{min-width:48px;width:48px;padding:0;font-size:22px;flex:0 0 auto}
 .themes{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .themes .lbl{font-size:12px;color:var(--muted);font-weight:700;margin-right:4px}
 .swatch{width:34px;height:34px;min-height:34px;min-width:34px;padding:0;border-radius:50%;border:2px solid var(--line);background:var(--c)}
@@ -104,7 +105,6 @@ button:disabled{opacity:.5}
 .sheet2 .title{font-weight:800;font-size:15px}
 .sheet2-actions{display:flex;gap:8px}
 .sheet2-actions button{flex:1}
-.fab.settings{bottom:calc(env(safe-area-inset-bottom) + 216px)}
 .setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
 .setrow strong{display:block;font-size:15px}
 .setrow small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
@@ -143,6 +143,7 @@ button:disabled{opacity:.5}
     <form id="searchForm">
       <input id="dest" type="search" placeholder="Où allez-vous ?" autocomplete="off" enterkeyhint="search" aria-label="Destination">
       <button type="submit">Chercher</button>
+      <button type="button" class="ghost gear" id="settingsBtn" aria-label="Paramètres" title="Paramètres">&#9881;</button>
     </form>
     <div class="dests" id="dests"></div>
     <button type="button" class="ghost favbtn hidden" id="favDest">☆ Ajouter aux favoris</button>
@@ -165,7 +166,6 @@ button:disabled{opacity:.5}
 
 <button class="fab report" id="reportBtn" aria-label="Signaler un événement" title="Signaler">!</button>
 <button class="fab" id="locate" aria-label="Me recentrer" title="Me recentrer">&#9678;</button>
-<button class="fab settings" id="settingsBtn" aria-label="Paramètres" title="Paramètres">&#9881;</button>
 
 <div id="settings" class="card sheet2 hidden" role="dialog" aria-label="Paramètres">
   <div class="title">Paramètres</div>
