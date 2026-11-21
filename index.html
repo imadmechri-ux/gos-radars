@@ -104,6 +104,14 @@ button:disabled{opacity:.5}
 .sheet2 .title{font-weight:800;font-size:15px}
 .sheet2-actions{display:flex;gap:8px}
 .sheet2-actions button{flex:1}
+.fab.settings{bottom:calc(env(safe-area-inset-bottom) + 216px)}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
+.setrow strong{display:block;font-size:15px}
+.setrow small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.toggle{min-width:96px;background:var(--bg);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:8px 12px;min-height:40px}
+.toggle[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.setblock{display:flex;flex-direction:column;gap:8px;padding-top:6px}
+.setblock > strong{font-size:15px}
 .sheet{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 100px);padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .sheet .title{grid-column:1/-1;font-weight:800;font-size:15px}
 .sheet button{background:var(--bg);color:var(--ink);border:1px solid var(--line);font-size:15px;min-height:52px;text-align:left}
@@ -150,7 +158,6 @@ button:disabled{opacity:.5}
       <div class="hint">Les options s'appliquent au prochain calcul d'itinéraire.</div>
     </div>
 
-    <div class="themes" id="themes" aria-label="Thème de couleurs"><span class="lbl">Thème</span></div>
     <div class="results" id="results"></div>
     <button id="goBtn" class="hidden" type="button">Démarrer la navigation</button>
   </section>
@@ -158,6 +165,19 @@ button:disabled{opacity:.5}
 
 <button class="fab report" id="reportBtn" aria-label="Signaler un événement" title="Signaler">!</button>
 <button class="fab" id="locate" aria-label="Me recentrer" title="Me recentrer">&#9678;</button>
+<button class="fab settings" id="settingsBtn" aria-label="Paramètres" title="Paramètres">&#9881;</button>
+
+<div id="settings" class="card sheet2 hidden" role="dialog" aria-label="Paramètres">
+  <div class="title">Paramètres</div>
+  <div class="setrow"><div><strong>Voix du guidage</strong><small>« Dans 300 mètres, tournez… »</small></div>
+    <button type="button" class="toggle" id="togGuide" aria-pressed="true">Activée</button></div>
+  <div class="setrow"><div><strong>Alertes vocales</strong><small>Radars fixes, radars mobiles, contrôles</small></div>
+    <button type="button" class="toggle" id="togAlerts" aria-pressed="true">Activées</button></div>
+  <div class="setblock"><strong>Couleurs</strong>
+    <div class="themes" id="themes"></div>
+  </div>
+  <div class="sheet2-actions"><button type="button" id="settingsClose">Fermer</button></div>
+</div>
 <div id="altSheet" class="card sheet2 hidden" role="dialog" aria-label="Autres itinéraires">
   <div class="title">Autres itinéraires</div>
   <div id="altList" class="results"></div>
@@ -279,8 +299,19 @@ button:disabled{opacity:.5}
   }
 
   // ---------- Voix et écran allumé ----------
-  function speak(text) {
-    if (state.muted || !("speechSynthesis" in window)) return;
+  // Réglages de son (sur cet appareil) : guidage et alertes séparés
+  const SOUND = { guide: true, alerts: true };
+  try {
+    const saved = JSON.parse(localStorage.getItem("gr-sound") || "{}");
+    if (typeof saved.guide === "boolean") SOUND.guide = saved.guide;
+    if (typeof saved.alerts === "boolean") SOUND.alerts = saved.alerts;
+  } catch (e) { /* ignoré */ }
+  function saveSound() {
+    try { localStorage.setItem("gr-sound", JSON.stringify(SOUND)); } catch (e) { /* ignoré */ }
+  }
+
+  function speak(text, kind = "guide") {
+    if (!SOUND[kind === "alert" ? "alerts" : "guide"] || !("speechSynthesis" in window)) return;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "fr-FR"; u.rate = 1.05;
     speechSynthesis.speak(u);
@@ -838,7 +869,7 @@ button:disabled{opacity:.5}
 
     if (d <= ALERT_DIST && !state.alerted.has(r.id)) {
       state.alerted.add(r.id);
-      speak(`Radar fixe dans ${Math.round(d / 10) * 10} mètres${r.vma ? `, limite ${r.vma}` : ""}`);
+      speak(`Radar fixe dans ${Math.round(d / 10) * 10} mètres${r.vma ? `, limite ${r.vma}` : ""}`, "alert");
     }
   }
 
@@ -1041,7 +1072,7 @@ button:disabled{opacity:.5}
     pill.classList.remove("hidden");
     if (d <= 500 && !community.announced.has(r.id)) {
       community.announced.add(r.id);
-      speak(`Attention, ${k.say} signalé à ${Math.round(d / 10) * 10} mètres`);
+      speak(`Attention, ${k.say} signalé à ${Math.round(d / 10) * 10} mètres`, "alert");
     }
   }
 
@@ -1110,11 +1141,25 @@ button:disabled{opacity:.5}
   $("altGo").addEventListener("click", chooseAlternative);
   $("goBtn").addEventListener("click", startNav);
   $("stopNav").addEventListener("click", stopNav);
+  function syncSoundUI() {
+    const on = SOUND.guide || SOUND.alerts;
+    $("mute").innerHTML = on ? "&#128266;" : "&#128263;";
+    $("mute").setAttribute("aria-label", on ? "Couper la voix" : "Activer la voix");
+    $("togGuide").setAttribute("aria-pressed", String(SOUND.guide));
+    $("togGuide").textContent = SOUND.guide ? "Activée" : "Coupée";
+    $("togAlerts").setAttribute("aria-pressed", String(SOUND.alerts));
+    $("togAlerts").textContent = SOUND.alerts ? "Activées" : "Coupées";
+  }
   $("mute").addEventListener("click", () => {
-    state.muted = !state.muted;
-    $("mute").innerHTML = state.muted ? "&#128263;" : "&#128266;";
-    $("mute").setAttribute("aria-label", state.muted ? "Activer la voix" : "Couper la voix");
+    const on = SOUND.guide || SOUND.alerts;
+    SOUND.guide = SOUND.alerts = !on;
+    saveSound(); syncSoundUI();
   });
+  $("togGuide").addEventListener("click", () => { SOUND.guide = !SOUND.guide; saveSound(); syncSoundUI(); });
+  $("togAlerts").addEventListener("click", () => { SOUND.alerts = !SOUND.alerts; saveSound(); syncSoundUI(); });
+  $("settingsBtn").addEventListener("click", () => $("settings").classList.remove("hidden"));
+  $("settingsClose").addEventListener("click", () => $("settings").classList.add("hidden"));
+  syncSoundUI();
   $("locate").addEventListener("click", () => {
     state.followUser = true;
     if (state.pos) map.easeTo({ center: [state.pos.lon, state.pos.lat], zoom: 16, duration: 500 });
