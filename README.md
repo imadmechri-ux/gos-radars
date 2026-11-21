@@ -1,61 +1,56 @@
-# gos-radars
+# Gos Radars
 
-Application iPhone (Swift / SwiftUI) de navigation avec alertes radars, inspirée de Coyote.
-Usage personnel et test, pas de publication prévue pour l'instant.
+Application web installable (PWA), gratuite, pour la navigation avec alertes de radars fixes.
+Même principe que l'app Rahim : une page statique hébergée sur GitHub Pages, installable sur l'écran d'accueil.
 
-## Choix retenus
+## Utilisation
 
-| Sujet | Décision |
-|---|---|
-| Plateforme | iOS uniquement, natif Swift + SwiftUI, iOS 17+ |
-| Cartes | OpenStreetMap via MapLibre Native (gratuit, sans quota) |
-| Routage | OSRM ou Valhalla (serveur public pour les tests, puis auto-hébergé) |
-| Radars fixes | Données ouvertes (à confirmer la source exacte), importées localement |
-| Radars mobiles et contrôles | Signalements communautaires en temps réel |
-| Backend communauté | Supabase (Postgres + temps réel), petit groupe d'utilisateurs |
-| Périmètre | France, usage personnel, pas de publication sur l'App Store |
+1. Ouvrir l'adresse de l'app sur le téléphone (Safari sur iPhone, Chrome sur Android).
+2. Installer : iPhone, Partager → « Sur l'écran d'accueil » ; Android, menu → « Installer l'application ».
+3. Ouvrir l'app, appuyer sur **Démarrer**, autoriser la position.
+4. Garder l'app ouverte et l'écran allumé. Les alertes vocales et visuelles se déclenchent à environ 700 m d'un radar fixe.
 
-Waze n'a pas d'API publique : il n'est pas utilisé comme source de données.
+## Fonctionnalités
 
-## Points à valider avant toute diffusion
+- Carte OpenStreetMap (OpenFreeMap), position, vitesse et cap en temps réel.
+- 3 206 radars fixes de métropole, issus de la liste officielle du Ministère de l'Intérieur (data.gouv.fr, licence ouverte).
+- Alerte vocale en français et bandeau à l'approche d'un radar, avec sa limite de vitesse.
+- Bandeau rouge si vous dépassez la limite affichée de plus de 5 km/h.
+- Mode hors ligne pour l'interface et les radars ; la carte nécessite le réseau.
 
-- **Cadre légal (France)** : les avertisseurs de radars et la signalisation de radars mobiles sont encadrés par le Code de la route. Vérifier la règle exacte avant d'activer les alertes sur radars mobiles, même en usage personnel.
-- **Politique App Store** : les apps de détection de radars sont souvent refusées. À garder en tête si publication un jour.
-- **Environnement** : le développement se fait sur un Mac avec Xcode. Compte Apple Developer requis pour installer sur iPhone et activer le GPS en arrière-plan.
+## Limites actuelles
 
-## Architecture prévue
+- **Radars mobiles et contrôles** : non couverts. Leur signalement est encadré par la loi en France ; ce point est à valider avant toute fonction de ce type.
+- **Arrière-plan** : une page web ne suit pas la position quand l'écran est éteint ou quand l'app est fermée. Garder l'app au premier plan.
+- **DOM-TOM** : les 103 radars d'outre-mer ne sont pas inclus pour l'instant.
+- **Itinéraire** : pas encore disponible (prévu, voir feuille de route).
+- Les données de radars peuvent être incomplètes ou obsolètes. Restez attentif à la route.
+
+## Mise en ligne (GitHub Pages, gratuit)
+
+1. Dans le dépôt : Settings → Pages.
+2. Source : « Deploy from a branch », branche `main` (ou la branche de travail), dossier `/ (root)`.
+3. L'adresse sera de la forme `https://imadmechri-ux.github.io/gos-radars/`.
+
+## Structure
 
 ```
-GosRadars/
-├── App/            Point d'entrée SwiftUI, navigation par onglets
-├── Location/       CLLocationManager, GPS en arrière-plan, vitesse, cap
-├── Map/            Carte MapLibre, affichage position et itinéraire
-├── Routing/        Client OSRM / Valhalla, calcul d'itinéraire
-├── Radars/         Modèle radar, import des radars fixes, recherche géographique
-├── Alerts/         Détection par rayon autour de la position, alerte vocale et visuelle
-├── Community/      Signalements temps réel (Supabase), antispam simple
-└── Tests/          Tests unitaires (logique de détection, import, distances)
+index.html              Application (carte, GPS, alertes), tout en un fichier
+sw.js                   Service worker (hors ligne)
+manifest.webmanifest    Métadonnées PWA
+icon-192.png, icon-512.png
+data/radars.json        Radars fixes (généré depuis le CSV officiel)
+.nojekyll               Désactive Jekyll sur GitHub Pages
 ```
+
+## Mettre à jour les radars
+
+Le CSV officiel est sur data.gouv.fr (« Liste des radars fixes en France »). Le fichier actuel date du 30 décembre 2025. Pour le régénérer, conversion du CSV (séparateur `;`, encodage cp1252) vers `data/radars.json` avec les champs `id`, `type`, `vma`, `lat`, `lon`.
 
 ## Feuille de route
 
-1. **Jalon 1 : base GPS et carte**. Carte OSM centrée sur la position, suivi du GPS, vitesse et cap affichés.
-2. **Jalon 2 : radars fixes**. Import des radars depuis les données ouvertes, stockage local, recherche par rayon.
-3. **Jalon 3 : alertes**. Alerte vocale (AVSpeechSynthesizer) et visuelle à l'approche d'un radar, avec distance et limite de vitesse.
-4. **Jalon 4 : itinéraire**. Recherche d'adresse, calcul via OSRM, guidage tour par tour simple.
-5. **Jalon 5 : communauté**. Signalement d'un radar mobile ou d'un contrôle en un geste, diffusé via Supabase.
-6. **Jalon 6 : tests terrain** sur route, batterie, GPS en arrière-plan.
-
-## Statut
-
-Démarrage : structure et documentation uniquement. Le code Swift viendra avec le jalon 1, à compiler et tester sur Mac.
-
-## Jalon 1 : mise en place sur Mac
-
-1. `brew install xcodegen`
-2. `xcodegen generate` à la racine du dépôt
-3. Ouvrir `GosRadars.xcodeproj`, vérifier la version du paquet MapLibre dans `project.yml`
-4. Lancer sur iPhone (compte Apple Developer requis pour l'appareil réel)
-5. Autoriser la position « Pendant l'utilisation », puis « Toujours » pour le suivi en arrière-plan
-
-Le jalon 1 n'affiche aucune alerte radar. Le code n'a pas été compilé dans l'environnement de développement (Linux) : premier build à faire sur Mac.
+1. Carte et GPS (fait).
+2. Radars fixes et alertes vocales (fait).
+3. Itinéraire : recherche d'adresse, calcul via OSRM, guidage simple.
+4. Signalement communautaire : radars mobiles et contrôles, via un backend gratuit (à choisir), après validation légale.
+5. Tests sur route : batterie, précision, comportement en arrière-plan.

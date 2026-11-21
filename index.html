@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gos Radars</title>
+<meta name="theme-color" content="#0C6B5B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Radars">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
+<style>
+:root{
+  --bg:#F2F5F1; --surface:#FFFFFF; --ink:#14302A; --muted:#5C736C; --line:#D9E2DC;
+  --accent:#0C6B5B; --accent-ink:#FFFFFF; --gold:#A8771C; --danger:#B3402E;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1917; --surface:#172522; --ink:#E4EEE9; --muted:#8FA59D; --line:#294039;
+    --accent:#56C7AC; --accent-ink:#0E1917; --gold:#E0B25B; --danger:#F08A78;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1917; --surface:#172522; --ink:#E4EEE9; --muted:#8FA59D; --line:#294039;
+  --accent:#56C7AC; --accent-ink:#0E1917; --gold:#E0B25B; --danger:#F08A78;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+#map{position:fixed;inset:0}
+.top{position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 12px) 16px 0;pointer-events:none;display:flex;flex-direction:column;gap:10px}
+.banner{pointer-events:auto;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;box-shadow:0 4px 18px rgba(0,0,0,.18)}
+.banner.on{display:block}
+.banner.alert{border-color:var(--gold)}
+.banner.over{border-color:var(--danger)}
+.banner .big{font-size:22px;font-weight:700}
+.banner .sub{font-size:14px;color:var(--muted);margin-top:2px}
+.banner.over .big{color:var(--danger)}
+.bottom{position:fixed;left:0;right:0;bottom:0;padding:14px 16px calc(env(safe-area-inset-bottom) + 14px);background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;display:flex;align-items:center;gap:14px;box-shadow:0 -4px 18px rgba(0,0,0,.12)}
+.speed{min-width:86px;text-align:center}
+.speed .n{font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.speed .u{font-size:12px;color:var(--muted)}
+.info{flex:1;font-size:13px;color:var(--muted);line-height:1.35}
+.info strong{color:var(--ink)}
+button{font:inherit;border:0;border-radius:12px;padding:13px 16px;font-weight:700;cursor:pointer;background:var(--accent);color:var(--accent-ink);min-height:48px}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:disabled{opacity:.5}
+.note{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 118px);font-size:12px;color:var(--muted);text-align:center;pointer-events:none}
+.fab{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom) + 130px);width:48px;min-height:48px;padding:0;border-radius:50%;background:var(--surface);color:var(--ink);border:1px solid var(--line);font-size:20px}
+</style>
+</head>
+<body>
+<div id="map" role="region" aria-label="Carte"></div>
+
+<div class="top">
+  <div id="banner" class="banner" role="status" aria-live="polite">
+    <div class="big" id="bannerBig"></div>
+    <div class="sub" id="bannerSub"></div>
+  </div>
+</div>
+
+<button class="fab" id="locate" aria-label="Me recentrer">&#9678;</button>
+<div class="note" id="note"></div>
+
+<div class="bottom">
+  <div class="speed" aria-label="Vitesse actuelle">
+    <div class="n" id="speed">--</div>
+    <div class="u">km/h</div>
+  </div>
+  <div class="info" id="info">
+    Appuyez sur <strong>Démarrer</strong> pour suivre votre position et être alerté à l'approche des radars fixes.
+  </div>
+  <button id="toggle">Démarrer</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+  const ALERT_DIST = 700;      // m : annonce du radar
+  const LIST_DIST = 1000;      // m : radar affiché dans le bandeau
+  const RESET_DIST = 1200;     // m : au-delà, le radar peut de nouveau être annoncé
+  const AHEAD_ANGLE = 45;      // degrés de part et d'autre du cap
+  const MIN_KMH_FOR_HEADING = 5;
+
+  const $ = (id) => document.getElementById(id);
+  const ui = { banner: $("banner"), big: $("bannerBig"), sub: $("bannerSub"), speed: $("speed"),
+               info: $("info"), toggle: $("toggle"), locate: $("locate"), note: $("note") };
+
+  const state = {
+    radars: [],
+    pos: null,           // {lat, lon}
+    prevPos: null,
+    kmh: null,
+    course: null,       // degrés, 0 = nord
+    watchId: null,
+    active: false,
+    alerted: new Set(),
+    wakeLock: null,
+    voiceReady: false,
+    followUser: true,
+  };
+
+  // ---------- Géométrie ----------
+  const R = 6371000;
+  const rad = (d) => d * Math.PI / 180;
+  const deg = (r) => r * 180 / Math.PI;
+  function distance(a, b) {
+    const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  function bearing(a, b) {
+    const dLon = rad(b.lon - a.lon);
+    const y = Math.sin(dLon) * Math.cos(rad(b.lat));
+    const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(dLon);
+    return (deg(Math.atan2(y, x)) + 360) % 360;
+  }
+  function angleDiff(a, b) {
+    const d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+  }
+
+  // ---------- Données ----------
+  async function loadRadars() {
+    try {
+      const res = await fetch("data/radars.json", { cache: "no-cache" });
+      state.radars = await res.json();
+    } catch (e) {
+      state.radars = [];
+      setNote("Impossible de charger les radars. Vérifiez la connexion.");
+    }
+  }
+
+  // ---------- Carte ----------
+  const map = new maplibregl.Map({
+    container: "map",
+    style: STYLE_URL,
+    center: [2.35, 46.6],
+    zoom: 5.5,
+    attributionControl: { compact: true },
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: false }), "top-right");
+
+  const userEl = document.createElement("div");
+  userEl.style.cssText = "width:18px;height:18px;border-radius:50%;background:#0C6B5B;border:3px solid #fff;box-shadow:0 0 0 2px rgba(12,107,91,.35)";
+  const userMarker = new maplibregl.Marker({ element: userEl });
+
+  map.on("dragstart", () => { state.followUser = false; });
+
+  map.on("load", async () => {
+    await loadRadars();
+    map.addSource("radars", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: state.radars.map((r) => ({
+        type: "Feature", properties: { id: r.id, vma: r.vma || 0 },
+        geometry: { type: "Point", coordinates: [r.lon, r.lat] } })) },
+    });
+    map.addLayer({
+      id: "radars", type: "circle", source: "radars",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 6, 2, 12, 4, 15, 7],
+        "circle-color": "#A8771C",
+        "circle-stroke-color": "#FFFFFF",
+        "circle-stroke-width": 1,
+      },
+    });
+    setNote("");
+  });
+
+  // ---------- Voix ----------
+  function speak(text) {
+    if (!("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "fr-FR";
+    u.rate = 1.05;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
+  // iOS n'autorise la voix qu'après une action de l'utilisateur.
+  function unlockVoice() {
+    if (state.voiceReady || !("speechSynthesis" in window)) return;
+    speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+    state.voiceReady = true;
+  }
+
+  // ---------- Écran allumé ----------
+  async function keepAwake() {
+    try {
+      if ("wakeLock" in navigator) {
+        state.wakeLock = await navigator.wakeLock.request("screen");
+      }
+    } catch (e) { /* non disponible : rien à faire */ }
+  }
+  function releaseAwake() {
+    if (state.wakeLock) { state.wakeLock.release().catch(() => {}); state.wakeLock = null; }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (state.active && document.visibilityState === "visible") keepAwake();
+  });
+
+  // ---------- Affichage ----------
+  function setNote(t) { ui.note.textContent = t; }
+
+  function showBanner(kind, big, sub) {
+    ui.banner.className = "banner on" + (kind ? " " + kind : "");
+    ui.big.textContent = big;
+    ui.sub.textContent = sub;
+  }
+  function hideBanner() { ui.banner.className = "banner"; }
+
+  // ---------- Cœur : position -> alertes ----------
+  function onPosition(p) {
+    const now = { lat: p.coords.latitude, lon: p.coords.longitude };
+
+    // Cap : celui du GPS si fourni, sinon direction du déplacement.
+    if (p.coords.speed != null && p.coords.speed >= 0) state.kmh = p.coords.speed * 3.6;
+    if (state.prevPos && distance(state.prevPos, now) > 5) {
+      state.course = bearing(state.prevPos, now);
+      if (state.kmh == null) state.kmh = 0;
+    }
+    if (p.coords.heading != null && !Number.isNaN(p.coords.heading) && (state.kmh ?? 0) >= MIN_KMH_FOR_HEADING) {
+      state.course = p.coords.heading;
+    }
+    state.prevPos = now;
+    state.pos = now;
+
+    ui.speed.textContent = state.kmh == null ? "--" : String(Math.round(state.kmh));
+    userMarker.setLngLat([now.lon, now.lat]).addTo(map);
+    if (state.followUser) map.easeTo({ center: [now.lon, now.lat], duration: 600 });
+
+    checkRadars();
+  }
+
+  function aheadRadars() {
+    const pos = state.pos;
+    if (!pos) return [];
+    const list = [];
+    for (const r of state.radars) {
+      // Filtre rapide par boîte englobante (≈ 2 km)
+      if (Math.abs(r.lat - pos.lat) > 0.03 || Math.abs(r.lon - pos.lon) > 0.03) continue;
+      const d = distance(pos, r);
+      if (d > LIST_DIST) continue;
+      const moving = state.course != null && (state.kmh ?? 0) >= MIN_KMH_FOR_HEADING;
+      const ahead = !moving || angleDiff(state.course, bearing(pos, r)) <= AHEAD_ANGLE || d < 60;
+      if (ahead) list.push({ r, d });
+    }
+    list.sort((a, b) => a.d - b.d);
+    return list;
+  }
+
+  function checkRadars() {
+    const list = aheadRadars();
+
+    // Libère les radars dépassés ou éloignés pour pouvoir les annoncer à nouveau.
+    for (const id of [...state.alerted]) {
+      const r = state.radars.find((x) => x.id === id);
+      if (!r || distance(state.pos, r) > RESET_DIST) state.alerted.delete(id);
+    }
+
+    if (!list.length) {
+      if (state.active) showBanner("", "Route dégagée", "Aucun radar fixe à moins de 1 km devant vous.");
+      return;
+    }
+
+    const { r, d } = list[0];
+    const vma = r.vma;
+    const over = vma && state.kmh != null && state.kmh > vma + 5;
+    const dist = Math.round(d / 10) * 10;
+    const sub = `Limite ${vma ?? "inconnue"} km/h`;
+
+    if (over) {
+      showBanner("over", `Radar à ${dist} m`, `${sub} · vous roulez à ${Math.round(state.kmh)} km/h`);
+    } else {
+      showBanner("alert", `Radar fixe à ${dist} m`, sub);
+    }
+
+    if (d <= ALERT_DIST && !state.alerted.has(r.id)) {
+      state.alerted.add(r.id);
+      speak(`Radar fixe dans ${dist} mètres${vma ? `, limite ${vma}` : ""}`);
+    }
+  }
+
+  // ---------- Démarrage / arrêt ----------
+  function start() {
+    if (!("geolocation" in navigator)) {
+      setNote("La géolocalisation n'est pas disponible sur cet appareil.");
+      return;
+    }
+    unlockVoice();
+    keepAwake();
+    state.active = true;
+    state.followUser = true;
+    ui.toggle.textContent = "Arrêter";
+    ui.toggle.classList.add("ghost");
+    ui.info.innerHTML = "Suivi actif. Gardez l'app ouverte, l'écran allumé, pour les alertes.";
+    state.watchId = navigator.geolocation.watchPosition(onPosition, (err) => {
+      const msg = err.code === 1 ? "Localisation refusée. Autorisez-la dans les réglages du navigateur."
+                                 : "Position indisponible pour le moment.";
+      setNote(msg);
+    }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+    showBanner("", "Recherche du GPS…", "");
+  }
+
+  function stop() {
+    state.active = false;
+    if (state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
+    state.watchId = null;
+    state.alerted.clear();
+    releaseAwake();
+    ui.toggle.textContent = "Démarrer";
+    ui.toggle.classList.remove("ghost");
+    ui.info.innerHTML = "Suivi arrêté. Appuyez sur <strong>Démarrer</strong> pour reprendre.";
+    ui.speed.textContent = "--";
+    hideBanner();
+  }
+
+  ui.toggle.addEventListener("click", () => (state.active ? stop() : start()));
+  ui.locate.addEventListener("click", () => {
+    state.followUser = true;
+    if (state.pos) map.easeTo({ center: [state.pos.lon, state.pos.lat], zoom: 15, duration: 500 });
+  });
+
+  // Service worker (mode hors ligne de la coquille de l'app)
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
