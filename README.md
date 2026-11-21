@@ -58,4 +58,4 @@ Démarrage : structure et documentation uniquement. Le code Swift viendra avec l
 4. Lancer sur iPhone (compte Apple Developer requis pour l'appareil réel)
 5. Autoriser la position « Pendant l'utilisation », puis « Toujours » pour le suivi en arrière-plan
 
-Le jalon 1 naffiche
+Le jalon 1 n'affiche aucune alerte radar. Le code n'a pas été compilé dans l'environnement de développement (Linux) : premier build à faire sur Mac.
