@@ -63,6 +63,13 @@ button:disabled{opacity:.5}
 .route .badges{font-size:12px;color:var(--muted);text-align:right}
 .dests{display:flex;flex-direction:column;gap:6px}
 .dests button{background:var(--bg);color:var(--ink);border:1px solid var(--line);text-align:left;font-weight:500;font-size:14px}
+.favbtn{width:100%}
+.places{display:flex;flex-direction:column;gap:6px}
+.places h4{margin:6px 0 0;font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.place{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.place .go{flex:1;min-width:0;text-align:left;background:transparent;color:var(--ink);padding:8px 0;font-weight:600;font-size:14px;min-height:40px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.place .x{background:transparent;color:var(--muted);padding:4px 8px;min-height:36px;min-width:36px;font-size:18px}
+.places > button.ghost{width:100%}
 
 /* Barre basse */
 .bar{position:fixed;left:0;right:0;bottom:0;padding:10px 10px calc(env(safe-area-inset-bottom) + 10px);background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -120,6 +127,8 @@ button:disabled{opacity:.5}
       <button type="submit">Chercher</button>
     </form>
     <div class="dests" id="dests"></div>
+    <button type="button" class="ghost favbtn hidden" id="favDest">☆ Ajouter aux favoris</button>
+    <div class="places" id="places"></div>
 
     <div class="opt">
       <div class="chips" role="group" aria-label="Options d'itinéraire">
@@ -356,6 +365,8 @@ button:disabled{opacity:.5}
 
   async function chooseDestination(d) {
     state.dest = d;
+    addHistory(d);
+    updateFavBtn();
     destMarker.setLngLat([d.lon, d.lat]).addTo(map);
     $("dests").innerHTML = "";
     await computeRoutes();
@@ -514,6 +525,81 @@ button:disabled{opacity:.5}
     map.fitBounds(bounds, { padding: { top: 260, bottom: 170, left: 40, right: 40 }, duration: 600 });
   }
 
+  // ---------- Favoris et récentes (mémorisés sur cet appareil) ----------
+  const PLACES = { hist: [], favs: [] };
+  function loadPlaces() {
+    try { PLACES.hist = JSON.parse(localStorage.getItem("gr-hist") || "[]"); } catch (e) { PLACES.hist = []; }
+    try { PLACES.favs = JSON.parse(localStorage.getItem("gr-favs") || "[]"); } catch (e) { PLACES.favs = []; }
+  }
+  function savePlaces() {
+    try {
+      localStorage.setItem("gr-hist", JSON.stringify(PLACES.hist));
+      localStorage.setItem("gr-favs", JSON.stringify(PLACES.favs));
+    } catch (e) { /* ignoré */ }
+  }
+  const samePlace = (a, b) => Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lon - b.lon) < 1e-4;
+  const shortName = (name) => name.split(",").slice(0, 2).join(",").trim();
+
+  function addHistory(d) {
+    PLACES.hist = [{ name: d.name, lat: d.lat, lon: d.lon }, ...PLACES.hist.filter((p) => !samePlace(p, d))].slice(0, 10);
+    savePlaces();
+    renderPlaces();
+  }
+  function isFavorite(d) { return PLACES.favs.some((p) => samePlace(p, d)); }
+  function toggleFavorite(d) {
+    if (isFavorite(d)) {
+      PLACES.favs = PLACES.favs.filter((p) => !samePlace(p, d));
+    } else {
+      const label = prompt("Nom de ce favori :", shortName(d.name));
+      if (!label || !label.trim()) return;
+      PLACES.favs = [{ name: label.trim(), lat: d.lat, lon: d.lon }, ...PLACES.favs];
+    }
+    savePlaces();
+    renderPlaces();
+    updateFavBtn();
+  }
+  function updateFavBtn() {
+    const btn = $("favDest");
+    if (!state.dest) { btn.classList.add("hidden"); return; }
+    btn.classList.remove("hidden");
+    btn.textContent = isFavorite(state.dest) ? "★ Retirer des favoris" : "☆ Ajouter aux favoris";
+  }
+  function placeRow(p, onRemove, label) {
+    const row = document.createElement("div");
+    row.className = "place";
+    const go = document.createElement("button");
+    go.type = "button"; go.className = "go"; go.textContent = label || p.name;
+    go.addEventListener("click", () => chooseDestination(p));
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "x"; x.textContent = "×";
+    x.setAttribute("aria-label", "Supprimer");
+    x.addEventListener("click", onRemove);
+    row.append(go, x);
+    return row;
+  }
+  function renderPlaces() {
+    const box = $("places");
+    box.innerHTML = "";
+    if (PLACES.favs.length) {
+      const h = document.createElement("h4"); h.textContent = "★ Favoris"; box.appendChild(h);
+      PLACES.favs.forEach((p) => box.appendChild(placeRow(p, () => {
+        PLACES.favs = PLACES.favs.filter((x) => x !== p);
+        savePlaces(); renderPlaces(); updateFavBtn();
+      })));
+    }
+    if (PLACES.hist.length) {
+      const h = document.createElement("h4"); h.textContent = "Récentes"; box.appendChild(h);
+      PLACES.hist.forEach((p) => box.appendChild(placeRow(p, () => {
+        PLACES.hist = PLACES.hist.filter((x) => x !== p);
+        savePlaces(); renderPlaces();
+      }, shortName(p.name))));
+      const clear = document.createElement("button");
+      clear.type = "button"; clear.className = "ghost"; clear.textContent = "Effacer l'historique";
+      clear.addEventListener("click", () => { PLACES.hist = []; savePlaces(); renderPlaces(); });
+      box.appendChild(clear);
+    }
+  }
+
   // ---------- Autres itinéraires, à tout moment ----------
   async function showAlternatives() {
     if (!state.dest || !state.pos) { status("Choisissez d'abord une destination", 4000); return; }
@@ -604,6 +690,7 @@ button:disabled{opacity:.5}
     map.getSource("routes").setData({ type: "FeatureCollection", features: [] });
     destMarker.remove();
     state.dest = null; state.routes = [];
+    updateFavBtn();
     $("results").innerHTML = "";
     $("goBtn").classList.add("hidden");
   }
@@ -959,6 +1046,10 @@ button:disabled{opacity:.5}
   });
 
   // ---------- Boutons ----------
+  $("favDest").addEventListener("click", () => { if (state.dest) toggleFavorite(state.dest); });
+  loadPlaces();
+  renderPlaces();
+  updateFavBtn();
   $("altBtn").addEventListener("click", showAlternatives);
   $("altClose").addEventListener("click", closeAlternatives);
   $("altGo").addEventListener("click", chooseAlternative);
