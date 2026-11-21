@@ -24,6 +24,12 @@
     color-scheme:dark;
   }
 }
+/* Thèmes choisis par l'utilisateur (attribut data-theme sur <html>) */
+:root[data-theme="night"]{--bg:#0F1720;--surface:#1A2633;--ink:#E6F1FF;--muted:#8AA0B5;--line:#2A3B4D;--accent:#33C6FF;--accent-ink:#04121C;--accent-soft:#16384A;--gold:#FFC23C;--danger:#FF5C5C;color-scheme:dark}
+:root[data-theme="neon"]{--bg:#0B0B12;--surface:#16161F;--ink:#F2F2F7;--muted:#9A9AAE;--line:#2A2A38;--accent:#FF3EA5;--accent-ink:#120010;--accent-soft:#3A0F2B;--gold:#C6FF00;--danger:#FF6B6B;color-scheme:dark}
+:root[data-theme="ocean"]{--bg:#0A1F3A;--surface:#12305A;--ink:#E8F6FF;--muted:#8FB3D9;--line:#1F4775;--accent:#2DD4BF;--accent-ink:#04201C;--accent-soft:#174A6A;--gold:#FACC15;--danger:#FB7185;color-scheme:dark}
+:root[data-theme="sunset"]{--bg:#1E1028;--surface:#2A1738;--ink:#FFF1E6;--muted:#C4A3B8;--line:#41254D;--accent:#FF7A3D;--accent-ink:#220A02;--accent-soft:#4A2418;--gold:#FFD166;--danger:#FF4D8D;color-scheme:dark}
+:root[data-theme="sand"]{--bg:#FBF4E8;--surface:#FFFFFF;--ink:#3B2A1A;--muted:#8A7360;--line:#EADBC6;--accent:#C8553D;--accent-ink:#FFFFFF;--accent-soft:#F6E1D9;--gold:#D98E04;--danger:#B42318;color-scheme:light}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
 #map{position:fixed;inset:0}
@@ -64,6 +70,10 @@ button:disabled{opacity:.5}
 .dests{display:flex;flex-direction:column;gap:6px}
 .dests button{background:var(--bg);color:var(--ink);border:1px solid var(--line);text-align:left;font-weight:500;font-size:14px}
 .favbtn{width:100%}
+.themes{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.themes .lbl{font-size:12px;color:var(--muted);font-weight:700;margin-right:4px}
+.swatch{width:34px;height:34px;min-height:34px;min-width:34px;padding:0;border-radius:50%;border:2px solid var(--line);background:var(--c)}
+.swatch[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:2px}
 .places{display:flex;flex-direction:column;gap:6px}
 .places h4{margin:6px 0 0;font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .place{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
@@ -140,6 +150,7 @@ button:disabled{opacity:.5}
       <div class="hint">Les options s'appliquent au prochain calcul d'itinéraire.</div>
     </div>
 
+    <div class="themes" id="themes" aria-label="Thème de couleurs"><span class="lbl">Thème</span></div>
     <div class="results" id="results"></div>
     <button id="goBtn" class="hidden" type="button">Démarrer la navigation</button>
   </section>
@@ -341,6 +352,7 @@ button:disabled{opacity:.5}
       },
     });
     updateReportLayer();
+    applyRouteColor();
   });
 
   // ---------- Recherche d'adresse ----------
@@ -1044,6 +1056,49 @@ button:disabled{opacity:.5}
       sendReport(b.dataset.kind);
     });
   });
+
+  // ---------- Thèmes de couleurs ----------
+  const THEMES = [
+    { id: "auto",   name: "Auto",             swatch: "#0C6B5B", route: "#0C6B5B" },
+    { id: "night",  name: "Nuit (cyan)",      swatch: "#33C6FF", route: "#33C6FF" },
+    { id: "neon",   name: "Néon",             swatch: "#FF3EA5", route: "#FF3EA5" },
+    { id: "ocean",  name: "Océan",            swatch: "#2DD4BF", route: "#2DD4BF" },
+    { id: "sunset", name: "Coucher de soleil", swatch: "#FF7A3D", route: "#FF7A3D" },
+    { id: "sand",   name: "Sable",            swatch: "#C8553D", route: "#C8553D" },
+  ];
+  let currentTheme = "auto";
+  try { currentTheme = localStorage.getItem("gr-theme") || "auto"; } catch (e) { /* ignoré */ }
+
+  function routeColor() {
+    return (THEMES.find((t) => t.id === currentTheme) || THEMES[0]).route;
+  }
+  function applyRouteColor() {
+    if (map.getLayer("routes")) map.setPaintProperty("routes", "line-color", ["case", ["get", "sel"], routeColor(), "#8A9A95"]);
+  }
+  function setTheme(id) {
+    currentTheme = id;
+    if (id === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", id);
+    try { localStorage.setItem("gr-theme", id); } catch (e) { /* ignoré */ }
+    applyRouteColor();
+    document.querySelectorAll(".swatch").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
+  }
+  function renderThemes() {
+    const box = $("themes");
+    THEMES.forEach((t) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "swatch";
+      b.dataset.id = t.id;
+      b.style.setProperty("--c", t.swatch);
+      b.title = t.name;
+      b.setAttribute("aria-label", `Thème ${t.name}`);
+      b.addEventListener("click", () => setTheme(t.id));
+      box.appendChild(b);
+    });
+    setTheme(currentTheme);
+  }
+  renderThemes();
 
   // ---------- Boutons ----------
   $("favDest").addEventListener("click", () => { if (state.dest) toggleFavorite(state.dest); });
