@@ -67,6 +67,12 @@ button:disabled{opacity:.5}
 .route{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);text-align:left;color:var(--ink);min-height:0}
 .route[aria-selected="true"]{border-color:var(--accent);background:var(--accent-soft)}
 .route .t{font-size:18px;font-weight:800}
+.rlabel{background:var(--surface);color:var(--ink);border:2px solid var(--c);border-radius:12px;padding:4px 8px;min-height:0;min-width:0;font-size:12px;line-height:1.25;white-space:nowrap;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.rlabel b{font-size:14px}
+.rlabel small{display:block;color:var(--muted);font-size:11px;font-weight:600}
+.rlabel.on{background:var(--c);color:#fff}
+.rlabel.on small{color:#fff}
+.route .thumb{width:72px;height:54px;flex:0 0 72px;background:var(--surface);border-radius:8px;border:1px solid var(--line)}
 .route .m{font-size:13px;color:var(--muted);margin-top:2px}
 .route .badges{font-size:12px;color:var(--muted);text-align:right}
 .dests{display:flex;flex-direction:column;gap:6px}
@@ -105,6 +111,15 @@ button:disabled{opacity:.5}
 .fab:disabled{opacity:.45}
 .sheet2{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 100px);padding:12px;max-height:58vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
 .sheet2 .title{font-weight:800;font-size:15px}
+#altSheet{max-height:34vh;padding:10px}
+#altSheet .title{font-size:14px}
+#altList{gap:6px}
+#altList .route{padding:6px 10px}
+#altList .route .t{font-size:16px}
+#altList .route .m{font-size:12px}
+#altList .route .thumb{width:56px;height:42px;flex-basis:56px}
+#altList .route .badges{font-size:11px}
+.sheet2-actions button{min-height:40px;padding:8px 12px;font-size:14px}
 .sheet2-actions{display:flex;gap:8px}
 .sheet2-actions button{flex:1}
 .setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -371,7 +386,7 @@ button:disabled{opacity:.5}
       id: "routes", type: "line", source: "routes",
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": ["case", ["get", "sel"], "#0C6B5B", "#8A9A95"],
+        "line-color": ["get", "color"],
         "line-width": ["case", ["get", "sel"], 7, 4],
         "line-opacity": ["case", ["get", "sel"], 0.95, 0.6],
       },
@@ -523,6 +538,32 @@ button:disabled{opacity:.5}
     }
   }
 
+  // Couleurs distinctes pour comparer plusieurs itinéraires sur la carte
+  const ALT_COLORS = ["#2563EB", "#F97316", "#9333EA"];
+  function colorFor(i, n) { return n <= 1 ? routeColor() : ALT_COLORS[i % ALT_COLORS.length]; }
+
+  // Aperçu SVG du tracé (sans fond de carte, léger et instantané)
+  function thumbSvg(r, color) {
+    const pts = r.pts, n = pts.length;
+    const step = Math.max(1, Math.ceil(n / 160));
+    const k = Math.cos(rad(pts[0].lat));
+    const xy = [];
+    for (let i = 0; i < n; i += step) xy.push([pts[i].lon * k, -pts[i].lat]);
+    xy.push([pts[n - 1].lon * k, -pts[n - 1].lat]);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [x, y] of xy) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+    const W = 72, H = 54, P = 6;
+    const sc = Math.min((W - 2 * P) / ((maxX - minX) || 1), (H - 2 * P) / ((maxY - minY) || 1));
+    const ox = (W - (maxX - minX) * sc) / 2, oy = (H - (maxY - minY) * sc) / 2;
+    const proj = ([x, y]) => [(ox + (x - minX) * sc).toFixed(1), (oy + (y - minY) * sc).toFixed(1)];
+    const line = xy.map(proj).map((q) => q.join(",")).join(" ");
+    const start = proj(xy[0]), end = proj(xy[xy.length - 1]);
+    return `<svg class="thumb" viewBox="0 0 ${W} ${H}" aria-hidden="true">` +
+      `<polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<circle cx="${start[0]}" cy="${start[1]}" r="3" fill="#fff" stroke="${color}" stroke-width="1.6"/>` +
+      `<circle cx="${end[0]}" cy="${end[1]}" r="3.2" fill="${color}"/></svg>`;
+  }
+
   function renderList(box, list, sel, onPick) {
     box.innerHTML = "";
     const now = Date.now();
@@ -534,7 +575,7 @@ button:disabled{opacity:.5}
       b.setAttribute("aria-selected", String(i === sel));
       const tags = [r.toll ? "péages" : "sans péage", r.highway ? "autoroute" : "hors autoroute", r.ferry ? "ferry" : ""].filter(Boolean).join(" · ");
       const arrive = new Date(now + r.time * 1000);
-      b.innerHTML = `<div><div class="t">${fmtDuration(r.time)}</div><div class="m">${fmtDist(r.km * 1000)} · arrivée ${fmtClock(arrive)}</div></div>
+      b.innerHTML = `${thumbSvg(r, colorFor(i, list.length))}<div><div class="t">${fmtDuration(r.time)}</div><div class="m">${fmtDist(r.km * 1000)} · arrivée ${fmtClock(arrive)}</div></div>
                      <div class="badges">${r.label || ""}<br>${tags}</div>`;
       b.addEventListener("click", () => onPick(i));
       box.appendChild(b);
@@ -552,7 +593,7 @@ button:disabled{opacity:.5}
     src.setData({
       type: "FeatureCollection",
       features: list.map((x, j) => ({
-        type: "Feature", properties: { sel: j === sel },
+        type: "Feature", properties: { sel: j === sel, color: colorFor(j, list.length) },
         geometry: { type: "LineString", coordinates: x.pts.map((p) => [p.lon, p.lat]) },
       })).sort((a, b) => (a.properties.sel ? 1 : 0) - (b.properties.sel ? 1 : 0)),
     });
@@ -658,14 +699,47 @@ button:disabled{opacity:.5}
       $("note").classList.add("hidden");
       renderAlternatives();
       $("altSheet").classList.remove("hidden");
+      fitAlternatives();
     } catch (e) {
       status("Aucun autre itinéraire trouvé", 4000);
     }
   }
 
+  // Cadre la carte pour voir les trois tracés en même temps
+  function fitAlternatives() {
+    const b = new maplibregl.LngLatBounds();
+    state.altRoutes.forEach((r) => r.pts.forEach((p) => b.extend([p.lon, p.lat])));
+    state.followUser = false;
+    // Marges réelles : au-dessus de la feuille, et sous la bannière de guidage si besoin
+    const sheetTop = $("altSheet").getBoundingClientRect().top;
+    const bottom = Math.max(120, Math.round(window.innerHeight - sheetTop + 16));
+    const top = state.nav ? 190 : 90;
+    map.fitBounds(b, { padding: { top, bottom, left: 40, right: 40 }, duration: 700, maxZoom: 15 });
+  }
+
+  // Étiquettes sur la carte : l'essentiel de chaque itinéraire, au milieu de son tracé
+  let routeLabels = [];
+  function clearRouteLabels() { routeLabels.forEach((m) => m.remove()); routeLabels = []; }
+  function showRouteLabels(list, sel) {
+    clearRouteLabels();
+    list.forEach((r, i) => {
+      const mid = r.pts[Math.floor(r.pts.length / 2)];
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "rlabel" + (i === sel ? " on" : "");
+      el.style.setProperty("--c", colorFor(i, list.length));
+      el.innerHTML = `<b>${fmtDuration(r.time)} · ${fmtDist(r.km * 1000)}</b>`;
+      el.addEventListener("click", (e) => { e.stopPropagation(); pickAlternative(i); });
+      // Étiquettes empilées verticalement : les tracés se croisent souvent au même endroit
+      const dy = (i - (list.length - 1) / 2) * 40;
+      routeLabels.push(new maplibregl.Marker({ element: el, anchor: "center", offset: [0, dy] }).setLngLat([mid.lon, mid.lat]).addTo(map));
+    });
+  }
+
   function renderAlternatives() {
     renderList($("altList"), state.altRoutes, state.altIdx, pickAlternative);
     drawLines(state.altRoutes, state.altIdx);
+    showRouteLabels(state.altRoutes, state.altIdx);
   }
 
   function pickAlternative(i) {
@@ -675,6 +749,7 @@ button:disabled{opacity:.5}
 
   function closeAlternatives() {
     $("altSheet").classList.add("hidden");
+    clearRouteLabels();
     if (state.nav && state.route) drawLines([state.route], 0);
     else if (state.routes.length) drawLines(state.routes, state.routeIdx);
   }
@@ -683,6 +758,7 @@ button:disabled{opacity:.5}
     const r = state.altRoutes[state.altIdx];
     if (!r) return;
     $("altSheet").classList.add("hidden");
+    clearRouteLabels();
     if (state.nav) {
       state.route = r;
       state.stepIdx = 0; state.spoken = {}; state.offCount = 0;
@@ -1123,7 +1199,7 @@ button:disabled{opacity:.5}
     return (THEMES.find((t) => t.id === currentTheme) || THEMES[0]).route;
   }
   function applyRouteColor() {
-    if (map.getLayer("routes")) map.setPaintProperty("routes", "line-color", ["case", ["get", "sel"], routeColor(), "#8A9A95"]);
+    if (map.getLayer("routes")) map.setPaintProperty("routes", "line-color", ["get", "color"]);
   }
   function setTheme(id) {
     currentTheme = id;
