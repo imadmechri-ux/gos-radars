@@ -575,7 +575,7 @@ button:disabled{opacity:.5}
       b.setAttribute("aria-selected", String(i === sel));
       const tags = [r.toll ? "péages" : "sans péage", r.highway ? "autoroute" : "hors autoroute", r.ferry ? "ferry" : ""].filter(Boolean).join(" · ");
       const arrive = new Date(now + r.time * 1000);
-      b.innerHTML = `${thumbSvg(r, colorFor(i, list.length))}<div><div class="t">${fmtDuration(r.time)}</div><div class="m">${fmtDist(r.km * 1000)} · arrivée ${fmtClock(arrive)}</div></div>
+      b.innerHTML = `${thumbSvg(r, i === sel ? routeColor() : "#8A9A95")}<div><div class="t">${fmtDuration(r.time)}</div><div class="m">${fmtDist(r.km * 1000)} · arrivée ${fmtClock(arrive)}</div></div>
                      <div class="badges">${r.label || ""}<br>${tags}</div>`;
       b.addEventListener("click", () => onPick(i));
       box.appendChild(b);
@@ -593,7 +593,7 @@ button:disabled{opacity:.5}
     src.setData({
       type: "FeatureCollection",
       features: list.map((x, j) => ({
-        type: "Feature", properties: { sel: j === sel, color: colorFor(j, list.length) },
+        type: "Feature", properties: { sel: j === sel, color: j === sel ? routeColor() : "#8A9A95" },
         geometry: { type: "LineString", coordinates: x.pts.map((p) => [p.lon, p.lat]) },
       })).sort((a, b) => (a.properties.sel ? 1 : 0) - (b.properties.sel ? 1 : 0)),
     });
@@ -699,6 +699,7 @@ button:disabled{opacity:.5}
       $("note").classList.add("hidden");
       renderAlternatives();
       $("altSheet").classList.remove("hidden");
+      if (state.nav) $("step").classList.add("hidden");
       fitAlternatives();
     } catch (e) {
       status("Aucun autre itinéraire trouvé", 4000);
@@ -713,26 +714,49 @@ button:disabled{opacity:.5}
     // Marges réelles : au-dessus de la feuille, et sous la bannière de guidage si besoin
     const sheetTop = $("altSheet").getBoundingClientRect().top;
     const bottom = Math.max(120, Math.round(window.innerHeight - sheetTop + 16));
-    const top = state.nav ? 190 : 90;
+    const top = 90;
     map.fitBounds(b, { padding: { top, bottom, left: 40, right: 40 }, duration: 700, maxZoom: 15 });
   }
 
-  // Étiquettes sur la carte : l'essentiel de chaque itinéraire, au milieu de son tracé
+  // Étiquettes sur la carte (style Waze) : chaque étiquette est placée au point où
+  // son tracé s'écarte le plus des deux autres, pour qu'elles ne se superposent pas.
   let routeLabels = [];
   function clearRouteLabels() { routeLabels.forEach((m) => m.remove()); routeLabels = []; }
+  function labelPoints(list) {
+    const samples = list.map((r) => {
+      const step = Math.max(1, Math.ceil(r.pts.length / 140));
+      const out = [];
+      for (let i = 0; i < r.pts.length; i += step) out.push({ idx: i, p: r.pts[i] });
+      return out;
+    });
+    return list.map((r, i) => {
+      const cands = samples[i].filter((c) => c.idx > r.pts.length * 0.12 && c.idx < r.pts.length * 0.88);
+      let best = cands[Math.floor(cands.length / 2)] || samples[i][Math.floor(samples[i].length / 2)];
+      let bestScore = -1;
+      for (const c of cands) {
+        let score = Infinity;
+        list.forEach((_, j) => {
+          if (j === i) return;
+          for (const o of samples[j]) score = Math.min(score, distance(c.p, o.p));
+        });
+        if (score === Infinity) score = 0;
+        if (score > bestScore) { bestScore = score; best = c; }
+      }
+      return best.p;
+    });
+  }
   function showRouteLabels(list, sel) {
     clearRouteLabels();
+    const points = labelPoints(list);
     list.forEach((r, i) => {
-      const mid = r.pts[Math.floor(r.pts.length / 2)];
+      const on = i === sel;
       const el = document.createElement("button");
       el.type = "button";
-      el.className = "rlabel" + (i === sel ? " on" : "");
-      el.style.setProperty("--c", colorFor(i, list.length));
-      el.innerHTML = `<b>${fmtDuration(r.time)} · ${fmtDist(r.km * 1000)}</b>`;
+      el.className = "rlabel" + (on ? " on" : "");
+      el.style.setProperty("--c", on ? routeColor() : "#8A9A95");
+      el.innerHTML = `<b>${fmtDuration(r.time)}</b><small>${fmtDist(r.km * 1000)}</small>`;
       el.addEventListener("click", (e) => { e.stopPropagation(); pickAlternative(i); });
-      // Étiquettes empilées verticalement : les tracés se croisent souvent au même endroit
-      const dy = (i - (list.length - 1) / 2) * 40;
-      routeLabels.push(new maplibregl.Marker({ element: el, anchor: "center", offset: [0, dy] }).setLngLat([mid.lon, mid.lat]).addTo(map));
+      routeLabels.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([points[i].lon, points[i].lat]).addTo(map));
     });
   }
 
@@ -750,6 +774,7 @@ button:disabled{opacity:.5}
   function closeAlternatives() {
     $("altSheet").classList.add("hidden");
     clearRouteLabels();
+    if (state.nav) $("step").classList.remove("hidden");
     if (state.nav && state.route) drawLines([state.route], 0);
     else if (state.routes.length) drawLines(state.routes, state.routeIdx);
   }
@@ -759,6 +784,7 @@ button:disabled{opacity:.5}
     if (!r) return;
     $("altSheet").classList.add("hidden");
     clearRouteLabels();
+    if (state.nav) $("step").classList.remove("hidden");
     if (state.nav) {
       state.route = r;
       state.stepIdx = 0; state.spoken = {}; state.offCount = 0;
