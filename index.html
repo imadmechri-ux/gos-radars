@@ -343,7 +343,7 @@ button:disabled{opacity:.5}
     try { if ("wakeLock" in navigator) state.wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { /* indisponible */ }
   }
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") keepAwake();
+    if (document.visibilityState === "visible") { keepAwake(); startTracking(); }
   });
 
   // ---------- Carte ----------
@@ -995,35 +995,66 @@ button:disabled{opacity:.5}
   }
 
   // ---------- Position ----------
+  // Suivi lissé : la position glisse d'un point à l'autre, le cap est lissé
+  const track = { shown: null, animId: 0, added: false };
+  function blendAngle(from, to, a) {
+    if (from == null) return to;
+    const d = ((to - from + 540) % 360) - 180;
+    return (from + d * a + 360) % 360;
+  }
+  function animateMarker(to, ms = 900) {
+    const from = track.shown || to;
+    const t0 = performance.now();
+    cancelAnimationFrame(track.animId);
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / ms), e = 1 - (1 - k) ** 3;
+      const cur = { lat: from.lat + (to.lat - from.lat) * e, lon: from.lon + (to.lon - from.lon) * e };
+      track.shown = cur;
+      userMarker.setLngLat([cur.lon, cur.lat]);
+      if (k < 1) track.animId = requestAnimationFrame(step);
+    };
+    track.animId = requestAnimationFrame(step);
+  }
+
   function onPosition(p) {
+    // Signal trop imprécis : on ignore le point plutôt que de faire sauter la carte
+    if ((p.coords.accuracy ?? 0) > 80) return;
     const now = { lat: p.coords.latitude, lon: p.coords.longitude };
+    const moved = state.prevPos ? distance(state.prevPos, now) : Infinity;
+
     if (p.coords.speed != null && p.coords.speed >= 0) state.kmh = p.coords.speed * 3.6;
-    if (state.prevPos && distance(state.prevPos, now) > 5) {
-      state.course = bearing(state.prevPos, now);
-      if (state.kmh == null) state.kmh = 0;
-    }
-    if (p.coords.heading != null && !Number.isNaN(p.coords.heading) && (state.kmh ?? 0) >= MIN_KMH_HEADING) {
-      state.course = p.coords.heading;
-    }
-    if (!state.prevPos || distance(state.prevPos, now) > 5) {
+    else if (moved > 5 && state.prevPos) state.kmh = state.kmh ?? 0;
+    const movingNow = (state.kmh ?? 0) >= MIN_KMH_HEADING;
+
+    // Cap : celui du GPS quand on roule, sinon direction du déplacement
+    let raw = null;
+    if (movingNow && p.coords.heading != null && !Number.isNaN(p.coords.heading)) raw = p.coords.heading;
+    else if (moved > 5 && state.prevPos) raw = bearing(state.prevPos, now);
+    if (raw != null) state.course = blendAngle(state.course, raw, state.course == null ? 1 : 0.35);
+
+    if (moved > 5 || !state.prevPos) {
       state.trail.push(now);
       if (state.trail.length > 6) state.trail.shift();
+      state.prevPos = now;
     }
-    state.prevPos = now;
     state.pos = now;
 
     $("speed").textContent = state.kmh == null ? "--" : String(Math.round(state.kmh));
     const over = state.limit && state.kmh != null && state.kmh > state.limit + 5;
     $("speed").classList.toggle("over", !!over);
 
-    userMarker.setLngLat([now.lon, now.lat]).addTo(map);
+    if (!track.added) {
+      userMarker.setLngLat([now.lon, now.lat]).addTo(map);
+      track.shown = now; track.added = true;
+    } else animateMarker(now);
+
     if (state.nav) {
       map.easeTo({
-        center: [now.lon, now.lat], zoom: navZoom(), duration: 800,
-        bearing: state.course != null && (state.kmh ?? 0) >= MIN_KMH_HEADING ? state.course : map.getBearing(),
+        center: [now.lon, now.lat], zoom: navZoom(), pitch: 45, duration: 900, essential: true,
+        bearing: movingNow && state.course != null ? state.course : map.getBearing(),
       });
     } else if (state.followUser) {
-      map.easeTo({ center: [now.lon, now.lat], duration: 600 });
+      map.easeTo({ center: [now.lon, now.lat], duration: 700, essential: true });
     }
 
     if (!state.lastLimitAt || Date.now() - state.lastLimitAt > LIMIT_EVERY_MS ||
@@ -1040,12 +1071,15 @@ button:disabled{opacity:.5}
     }
   }
 
+  // Redémarre le GPS : iOS peut l'arrêter quand l'app passe en arrière-plan
+  let watchId = null;
   function startTracking() {
     if (!("geolocation" in navigator)) { status("Géolocalisation indisponible sur cet appareil", 0); return; }
+    if (watchId != null) navigator.geolocation.clearWatch(watchId);
     keepAwake();
-    navigator.geolocation.watchPosition(onPosition, (err) => {
-      status(err.code === 1 ? "Localisation refusée : autorisez-la dans les réglages" : "Position indisponible pour le moment", 0);
-    }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+    watchId = navigator.geolocation.watchPosition(onPosition, (err) => {
+      status(err.code === 1 ? "Localisation refusée : autorisez-la dans les réglages" : "Signal GPS faible, nouvelle tentative…", 3000);
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
   }
 
   // Marqueur de position : suit le GPS, sans attendre la carte
