@@ -405,11 +405,40 @@ button:disabled{opacity:.5}
   });
 
   // ---------- Recherche d'adresse ----------
-  async function geocode(q) {
-    const url = `${NOMINATIM}?format=jsonv2&limit=5&accept-language=fr&countrycodes=fr&q=${encodeURIComponent(q)}`;
+  // Recherche d'adresse ou de commerce, d'abord à proximité de ta position
+  async function searchPlaces(q, box, bounded) {
+    let url = `${NOMINATIM}?format=jsonv2&limit=20&accept-language=fr&countrycodes=fr&q=${encodeURIComponent(q)}`;
+    if (box) url += `&viewbox=${box}&bounded=${bounded ? 1 : 0}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("geocode");
     return (await res.json()).map((x) => ({ name: x.display_name, lat: +x.lat, lon: +x.lon }));
+  }
+  async function geocode(q) {
+    const here = state.pos;
+    let found = [];
+    const seen = new Set();
+    const add = (list) => list.forEach((d) => {
+      const key = d.lat.toFixed(4) + "," + d.lon.toFixed(4);
+      if (!seen.has(key)) { seen.add(key); found.push(d); }
+    });
+    if (here) {
+      // Zones de plus en plus larges : 3 km, puis 10 km, puis 30 km autour de toi
+      for (const deg of [0.03, 0.1, 0.3]) {
+        const box = `${here.lon - deg},${here.lat + deg},${here.lon + deg},${here.lat - deg}`;
+        add(await searchPlaces(q, box, true));
+        if (found.length >= 8) break;
+      }
+      found.forEach((d) => { d.dist = distance(here, d); });
+      found.sort((x, y) => x.dist - y.dist);
+    }
+    if (!found.length) {
+      // Aucun résultat autour de toi : recherche générale, biaisée vers ta position
+      const deg = 0.5;
+      const box = here ? `${here.lon - deg},${here.lat + deg},${here.lon + deg},${here.lat - deg}` : null;
+      add(await searchPlaces(q, box, false));
+      if (here) found.forEach((d) => { d.dist = distance(here, d); });
+    }
+    return found.slice(0, 12);
   }
 
   function showDestinations(list) {
@@ -418,7 +447,8 @@ button:disabled{opacity:.5}
     for (const d of list) {
       const b = document.createElement("button");
       b.type = "button";
-      b.textContent = d.name.length > 90 ? d.name.slice(0, 88) + "…" : d.name;
+      const label = d.name.length > 90 ? d.name.slice(0, 88) + "…" : d.name;
+      b.textContent = d.dist != null ? `${fmtDist(d.dist)} · ${label}` : label;
       b.addEventListener("click", () => chooseDestination(d));
       box.appendChild(b);
     }
