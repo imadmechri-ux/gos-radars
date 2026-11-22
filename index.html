@@ -405,6 +405,58 @@ button:disabled{opacity:.5}
   });
 
   // ---------- Recherche d'adresse ----------
+  // ---------- Commerces à proximité (Overpass / OpenStreetMap) ----------
+  const OVERPASS = "https://overpass-api.de/api/interpreter";
+  // Liste blanche : seules ces catégories sont envoyées, jamais le texte saisi par l'utilisateur
+  const POI_CATEGORIES = [
+    { words: ["boulang", "pain", "patisserie"], tags: ['"shop"="bakery"'], label: "Boulangerie" },
+    { words: ["pharm"], tags: ['"amenity"="pharmacy"'], label: "Pharmacie" },
+    { words: ["restau", "resto"], tags: ['"amenity"="restaurant"'], label: "Restaurant" },
+    { words: ["cafe"], tags: ['"amenity"="cafe"'], label: "Café" },
+    { words: ["essence", "carburant", "station", "fuel"], tags: ['"amenity"="fuel"'], label: "Station-service" },
+    { words: ["parking"], tags: ['"amenity"="parking"'], label: "Parking" },
+    { words: ["supermarch", "courses", "epicerie"], tags: ['"shop"="supermarket"'], label: "Supermarché" },
+    { words: ["hopital", "urgence"], tags: ['"amenity"="hospital"'], label: "Hôpital" },
+    { words: ["distrib", "banque", "atm", "argent"], tags: ['"amenity"="atm"'], label: "Distributeur" },
+    { words: ["toilette", "wc"], tags: ['"amenity"="toilets"'], label: "Toilettes" },
+    { words: ["borne", "recharge", "electrique"], tags: ['"amenity"="charging_station"'], label: "Borne de recharge" },
+  ];
+  const normText = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  function matchCategory(q) {
+    const t = normText(q);
+    return POI_CATEGORIES.find((c) => c.words.some((w) => t.includes(w))) || null;
+  }
+  // Requête construite uniquement avec des nombres vérifiés et des tags de la liste blanche
+  async function overpassNearby(cat, here, radius) {
+    const lat = Number(here.lat), lon = Number(here.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+    const r = Math.round(Math.min(8000, Math.max(300, Number(radius) || 3000)));
+    const around = `(around:${r},${lat},${lon})`;
+    const parts = cat.tags.map((t) => `node${around}[${t}];way${around}[${t}];`).join("");
+    const query = `[out:json][timeout:15];(${parts});out center 40;`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 16000);
+    try {
+      const res = await fetch(OVERPASS, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ data: query }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error("overpass");
+      const data = await res.json();
+      return (data.elements || []).map((e) => {
+        const la = e.lat ?? e.center?.lat, lo = e.lon ?? e.center?.lon;
+        if (la == null || lo == null) return null;
+        const t = e.tags || {};
+        const street = [t["addr:housenumber"], t["addr:street"]].filter(Boolean).join(" ");
+        const place = [street, t["addr:city"] || t["addr:postcode"]].filter(Boolean).join(", ");
+        const name = t.name || t.brand || cat.label;
+        return { name: place ? `${name}, ${place}` : name, lat: la, lon: lo, dist: distance(here, { lat: la, lon: lo }) };
+      }).filter(Boolean).sort((x, y) => x.dist - y.dist).slice(0, 20);
+    } finally { clearTimeout(timer); }
+  }
+
   // Recherche d'adresse ou de commerce, d'abord à proximité de ta position
   async function searchPlaces(q, box, bounded) {
     let url = `${NOMINATIM}?format=jsonv2&limit=20&accept-language=fr&countrycodes=fr&q=${encodeURIComponent(q)}`;
@@ -415,6 +467,16 @@ button:disabled{opacity:.5}
   }
   async function geocode(q) {
     const here = state.pos;
+    const cat = matchCategory(q);
+    if (here && cat) {
+      // Commerces proches : 3 km, puis 8 km. En cas d'échec, on passe à la recherche classique.
+      for (const radius of [3000, 8000]) {
+        try {
+          const list = await overpassNearby(cat, here, radius);
+          if (list.length) return list;
+        } catch (e) { break; }
+      }
+    }
     let found = [];
     const seen = new Set();
     const add = (list) => list.forEach((d) => {
